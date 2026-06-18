@@ -1,0 +1,75 @@
+{
+  "entities": {
+    "Service": {
+      "title": "Service",
+      "description": "Beauty Service offered in salon",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "category": { "type": "string" },
+        "defaultPrice": { "type": "number" }
+      },
+      "required": ["id", "name", "category", "defaultPrice"]
+    },
+    "Customer": {
+      "title": "Customer",
+      "description": "Salon customer profile",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "full_name": { "type": "string" },
+        "phone_number": { "type": "string" },
+        "birth_date": { "type": "string" },
+        "created_at": { "type": "string" },
+        "notes_preferences": { "type": "string" }
+      },
+      "required": ["id", "full_name", "phone_number", "created_at"]
+    },
+    "Visit": {
+      "title": "Visit",
+      "description": "Log of a customer visit",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "customer_id": { "type": "string" },
+        "items_used": { "type": "array" },
+        "price_charged": { "type": "number" },
+        "payment_method": { "type": "string" },
+        "visit_date": { "type": "string" }
+      },
+      "required": ["id", "customer_id", "items_used", "price_charged", "payment_method", "visit_date"]
+    },
+    "Staff": {
+      "title": "Staff",
+      "description": "Salon staff members",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "role": { "type": "string" },
+        "password": { "type": "string" },
+        "created_at": { "type": "string" }
+      },
+      "required": ["id", "name", "role", "password", "created_at"]
+    }
+  },
+  "firestore": {
+    "services": {
+      "schema": "Service",
+      "description": "List of salon services"
+    },
+    "customers": {
+      "schema": "Customer",
+      "description": "List of salon customers"
+    },
+    "visits": {
+      "schema": "Visit",
+      "description": "List of salon customer visits"
+    },
+    "staff": {
+      "schema": "Staff",
+      "description": "List of salon staff"
+    }
+  }
+}

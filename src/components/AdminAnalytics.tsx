@@ -1,0 +1,562 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+import React, { useState, useEffect } from 'react';
+import { Language, CustomerWithRetention, Visit, SalonService } from '../types';
+import { Dict } from '../translations';
+import { AreaChart, TrendingUp, Download, PieChart, Star, Calendar, RefreshCcw, Landmark, CreditCard, DollarSign } from 'lucide-react';
+
+interface AnalyticsPayload {
+  revenue: {
+    daily: number;
+    dailyBreakdown: Record<string, number>;
+    weekly: number;
+    monthly: number;
+  };
+  distribution: {
+    Frequent: number;
+    Occasional: number;
+    'At-Risk': number;
+  };
+  leaderboard: Array<{ count: number; name: string; revenue: number }>;
+}
+
+interface CustomRangeResult {
+  start: string;
+  end: string;
+  totalRevenue: number;
+  transactionCount: number;
+  breakDown: Record<string, number>;
+}
+
+interface AdminAnalyticsProps {
+  lang: Language;
+  dict: Dict;
+  customers?: CustomerWithRetention[];
+  allVisits?: Visit[];
+  salonServices?: SalonService[];
+}
+
+export default function AdminAnalytics({ 
+  lang, 
+  dict, 
+  customers = [], 
+  allVisits = [], 
+  salonServices = [] 
+}: AdminAnalyticsProps) {
+  // Custom range states
+  const [startDate, setStartDate] = useState(() => {
+    const d = new Date('2026-06-01');
+    return d.toISOString().split('T')[0];
+  });
+  const [endDate, setEndDate] = useState(() => {
+    const d = new Date('2026-06-17');
+    return d.toISOString().split('T')[0];
+  });
+
+  // Export states
+  const [selectedStatus, setSelectedStatus] = useState<'Green' | 'Yellow' | 'Red'>('Red');
+  const [exportFormat, setExportFormat] = useState<'csv' | 'json'>('csv');
+
+  // Compute live responsive analytics client side
+  const analytics = React.useMemo(() => {
+    const curTime = new Date();
+    const startOfToday = new Date(curTime.getFullYear(), curTime.getMonth(), curTime.getDate());
+    const sevenDaysAgo = new Date(curTime.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const thirtyDaysAgo = new Date(curTime.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+    let dailyRev = 0;
+    const dailyBreakdown: Record<string, number> = {
+      'Telebirr': 0, 'CBE Birr': 0, 'M-Pesa': 0, 'Bank Transfer': 0, 'Cash': 0, 'Card': 0
+    };
+    let weeklyRev = 0;
+    let monthlyRev = 0;
+
+    allVisits.forEach(v => {
+      const vDate = new Date(v.visit_date);
+      const price = Number(v.price_charged || 0);
+
+      if (vDate >= startOfToday) {
+        dailyRev += price;
+        const method = v.payment_method;
+        if (method in dailyBreakdown) {
+          dailyBreakdown[method] += price;
+        }
+      }
+      if (vDate >= sevenDaysAgo) {
+        weeklyRev += price;
+      }
+      if (vDate >= thirtyDaysAgo) {
+        monthlyRev += price;
+      }
+    });
+
+    const distribution = {
+      Frequent: 0,
+      Occasional: 0,
+      'At-Risk': 0
+    };
+    customers.forEach(c => {
+      if (c.retentionStatus in distribution) {
+        distribution[c.retentionStatus]++;
+      }
+    });
+
+    const serviceLeaderboard: Record<string, { count: number; name: string; revenue: number }> = {};
+    allVisits.forEach(v => {
+      const price = Number(v.price_charged || 0);
+      const items = (Array.isArray(v.items_used) ? v.items_used : []) as string[];
+
+      items.forEach(itemId => {
+        const def = salonServices.find(s => s.id === itemId);
+        const name = def ? def.name : itemId;
+        if (!serviceLeaderboard[itemId]) {
+          serviceLeaderboard[itemId] = { count: 0, name, revenue: 0 };
+        }
+        serviceLeaderboard[itemId].count++;
+        serviceLeaderboard[itemId].revenue += (def ? def.defaultPrice : price / (items.length || 1));
+      });
+    });
+
+    const leaderboard = Object.values(serviceLeaderboard)
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 5);
+
+    return {
+      revenue: {
+        daily: dailyRev,
+        dailyBreakdown,
+        weekly: weeklyRev,
+        monthly: monthlyRev
+      },
+      distribution,
+      leaderboard
+    };
+  }, [customers, allVisits, salonServices]);
+
+  // Compute live dynamic custom date range metrics
+  const customRange = React.useMemo(() => {
+    const startObj = new Date(startDate);
+    const endObj = new Date(endDate);
+    endObj.setHours(23, 59, 59, 999);
+
+    let totalRevenue = 0;
+    let transactionCount = 0;
+    const breakDown: Record<string, number> = {
+      'Telebirr': 0, 'CBE Birr': 0, 'M-Pesa': 0, 'Bank Transfer': 0, 'Cash': 0, 'Card': 0
+    };
+
+    allVisits.forEach(v => {
+      const vDate = new Date(v.visit_date);
+      if (vDate >= startObj && vDate <= endObj) {
+        const price = Number(v.price_charged || 0);
+        totalRevenue += price;
+        transactionCount++;
+        const method = v.payment_method;
+        if (method in breakDown) {
+          breakDown[method] += price;
+        }
+      }
+    });
+
+    return {
+      start: startDate,
+      end: endDate,
+      totalRevenue,
+      transactionCount,
+      breakDown
+    };
+  }, [startDate, endDate, allVisits]);
+
+  // Compute live preview lists of segmented classifications
+  const previewList = React.useMemo(() => {
+    const statusParam = selectedStatus === 'Green' ? 'Frequent' : selectedStatus === 'Yellow' ? 'Occasional' : 'At-Risk';
+    return customers.filter(c => c.retentionStatus === statusParam);
+  }, [selectedStatus, customers]);
+
+  // Calculate percentages for segment progressive gauges
+  const freqCount = analytics.distribution.Frequent;
+  const occCount = analytics.distribution.Occasional;
+  const riskCount = analytics.distribution['At-Risk'];
+  const totalClients = freqCount + occCount + riskCount || 1;
+
+  const freqPct = Math.round((freqCount / totalClients) * 100);
+  const occPct = Math.round((occCount / totalClients) * 100);
+  const riskPct = Math.round((riskCount / totalClients) * 100);
+
+  // Client-Side Export File downloading - No server dependencies required
+  const handleDownload = () => {
+    const statusParam = selectedStatus === 'Green' ? 'Frequent' : selectedStatus === 'Yellow' ? 'Occasional' : 'At-Risk';
+    if (exportFormat === 'json') {
+      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(previewList, null, 2));
+      const downloadAnchor = document.createElement('a');
+      downloadAnchor.setAttribute("href", dataStr);
+      downloadAnchor.setAttribute("download", `salon_clients_${statusParam.toLowerCase()}.json`);
+      document.body.appendChild(downloadAnchor);
+      downloadAnchor.click();
+      downloadAnchor.remove();
+    } else {
+      // CSV format
+      const headers = ['Full Name', 'Phone Number', 'Birth Date', 'Created At', 'Notes/Preferences'];
+      const rows = previewList.map(c => [
+        `"${c.full_name.replace(/"/g, '""')}"`,
+        `"${c.phone_number.replace(/"/g, '""')}"`,
+        `"${(c.birth_date || '').replace(/"/g, '""')}"`,
+        `"${(c.created_at || '').replace(/"/g, '""')}"`,
+        `"${(c.notes_preferences || '').replace(/"/g, '""')}"`
+      ]);
+      const csvContent = [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.setAttribute("href", url);
+      link.setAttribute("download", `salon_clients_${statusParam.toLowerCase()}.csv`);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+  };
+
+  const getPredefinedNameTranslated = (name: string) => {
+    if (lang === 'am') {
+      const mappings: Record<string, string> = {
+        'Precision Color Balayage': 'ልዩ የፀጉር ቀለም መቀየር (Balayage)',
+        'Hydrafacial Glow': 'ፊት ማጽዳትና ማደስ (Hydrafacial)',
+        'Classic Spa Manicure': 'የቅንጦት ጥፍር ውበትና እጅ ማሳጅ (Manicure)',
+        'Luxury Pedicure Care': 'የእግር ማጽዳትና ህክምና (Pedicare)',
+        'Deep Tissue Massage': 'ደንበኛን ዘና የሚያደርግ የሰውነት ማሳጅ (Deep Tissue)',
+        'Keratin Infusion Restoration': 'የፀጉር ምግብና የእንክብካቤ ህክምና (Keratin)',
+        'Silk Blowout Style': 'ቅንጦት ፀጉር ማድረቅና ስታይል (Blowout)',
+        'Collagen Face Treatment': 'የኮላጅን ፊት ህክምና (Collagen Facial)'
+      };
+      return mappings[name] || name;
+    }
+    return name;
+  };
+
+  return (
+    <div className="space-y-6 font-sans text-neutral-800" id="admin-analytics-view">
+      
+      {/* Dynamic Sync Trigger Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-neutral-50 p-5 rounded-2xl border border-neutral-200/50 shadow-xs">
+        <div>
+          <h3 className="text-sm font-bold text-neutral-900 tracking-tight">{dict.analytics_title}</h3>
+          <p className="text-[11px] text-neutral-400 font-medium">{dict.analytics_subtitle}</p>
+        </div>
+        <button
+          className="p-1.5 px-4 self-start sm:self-center rounded-full bg-emerald-50/50 border border-emerald-100 text-[11px] text-emerald-800 font-bold flex items-center gap-1.5 shadow-xs cursor-default select-none"
+        >
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 relative flex">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+          </span>
+          {lang === 'am' ? 'ባለበት የነቃ' : 'Live Connected'}
+        </button>
+      </div>
+
+      {/* 6.1 Multi-Tier Revenue Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {/* Daily card */}
+        <div className="bg-white p-5 rounded-2xl border border-neutral-200/40 shadow-ios relative overflow-hidden flex flex-col justify-between h-36">
+          <div className="absolute top-1 right-2 p-2 text-neutral-100/60 font-black text-6xl select-none leading-none z-0">{lang === 'am' ? 'ዛሬ' : 'TODAY'}</div>
+          <div className="z-10">
+            <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider block">{dict.card_daily}</span>
+            <span className="text-3xl font-extrabold text-neutral-900 mt-1.5 block">
+              ETB {analytics?.revenue.daily.toFixed(2)}
+            </span>
+          </div>
+          <div className="text-[10px] text-neutral-600 font-medium z-10 flex flex-wrap gap-1.5 pt-2 border-t border-neutral-200/40">
+            {Object.keys(analytics?.revenue.dailyBreakdown || {}).length === 0 ? (
+              <span className="italic text-neutral-400">{dict.no_transactions_today}</span>
+            ) : (
+              Object.entries(analytics?.revenue.dailyBreakdown || {}).map(([c, amt]) => (
+                <span key={c} className="bg-neutral-50 px-2 py-0.5 rounded-full border border-neutral-200 block text-[9px] font-bold text-neutral-700">
+                  {c === 'Telebirr' ? (lang === 'am' ? 'ቴሌብር' : 'Telebirr') :
+                   c === 'CBE Birr' ? (lang === 'am' ? 'ሲቢኢ ብር' : 'CBE Birr') :
+                   c === 'M-Pesa' ? (lang === 'am' ? 'ኤም-ፔሳ' : 'M-Pesa') :
+                   c === 'Bank Transfer' ? (lang === 'am' ? 'ባንክ ማስተላለፍ' : 'Bank Transfer') :
+                   c === 'Cash' ? (lang === 'am' ? 'ጥሬ ገንዘብ' : 'Cash') : (lang === 'am' ? 'ካርድ' : c)}: <strong>{Number(amt).toFixed(0)} ETB</strong>
+                </span>
+              ))
+            )}
+          </div>
+        </div>
+
+        {/* Weekly card */}
+        <div className="bg-white p-5 rounded-2xl border border-neutral-200/40 shadow-ios relative overflow-hidden flex flex-col justify-between h-36">
+          <div className="absolute top-1 right-2 p-2 text-neutral-100/60 font-black text-6xl select-none leading-none z-0">{lang === 'am' ? 'ሳምንት' : 'WEEK'}</div>
+          <div className="z-10">
+            <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider block">{dict.card_weekly}</span>
+            <span className="text-3xl font-extrabold text-neutral-900 mt-1.5 block">
+              ETB {analytics?.revenue.weekly.toFixed(2)}
+            </span>
+            <p className="text-[10px] text-neutral-500 font-semibold mt-1 block">{dict.rolling_7_days}</p>
+          </div>
+        </div>
+
+        {/* Monthly card */}
+        <div className="bg-white p-5 rounded-2xl border border-neutral-200/40 shadow-ios relative overflow-hidden flex flex-col justify-between h-36">
+          <div className="absolute top-1 right-2 p-2 text-neutral-100/60 font-black text-6xl select-none leading-none z-0">{lang === 'am' ? 'ወር' : 'MONTH'}</div>
+          <div className="z-10">
+            <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider block">{dict.card_monthly}</span>
+            <span className="text-3xl font-extrabold text-neutral-900 mt-1.5 block">
+              ETB {analytics?.revenue.monthly.toFixed(2)}
+            </span>
+            <p className="text-[10px] text-neutral-400 font-semibold mt-1">{dict.calendar_month}</p>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+        {/* Left Hand: Custom Date Range Queries & Client Segment Distribs */}
+        <div className="space-y-6">
+          
+          {/* Custom Queries Box */}
+          <div className="bg-white p-6 rounded-[24px] border border-neutral-200/50 shadow-ios space-y-4">
+            <div className="flex items-center gap-2">
+              <Calendar className="w-4 h-4 text-neutral-400" />
+              <h3 className="text-xs font-bold text-neutral-850 uppercase tracking-wider">{dict.calc_title}</h3>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="block text-[10px] font-bold text-neutral-400 uppercase">{dict.label_start_date}</label>
+                <input
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  className="w-full px-3 py-2 text-xs bg-neutral-50 border border-neutral-200/60 rounded-xl mt-1 focus:outline-none focus:border-neutral-900 focus:ring-1 focus:ring-neutral-900 transition-all text-neutral-800"
+                  id="query-start-date"
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold text-neutral-400 uppercase">{dict.label_end_date}</label>
+                <input
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  className="w-full px-3 py-2 text-xs bg-neutral-50 border border-neutral-200/60 rounded-xl mt-1 focus:outline-none focus:border-neutral-900 focus:ring-1 focus:ring-neutral-900 transition-all text-neutral-800"
+                  id="query-end-date"
+                />
+              </div>
+              <div
+                className="col-span-2 py-2 px-4 bg-[#FAF9F6] border border-[#E5D5C8]/45 text-neutral-800 text-xs font-bold rounded-xl mt-2 text-center select-none"
+                id="btn-trigger-custom-range"
+              >
+                ⚡ {lang === 'am' ? 'በእውነተኛ ሰዓት የተሰላ' : 'Calculated in Real-Time'}
+              </div>
+            </div>
+
+            {customRange && (
+              <div className="p-4 bg-neutral-50 rounded-2xl border border-neutral-200/50 space-y-3">
+                <div className="flex justify-between items-center border-b border-neutral-200/40 pb-2">
+                  <span className="text-xs font-semibold text-neutral-600">{dict.gross_range_revenue}</span>
+                  <span className="text-base font-extrabold text-neutral-950">{customRange.totalRevenue.toFixed(2)} ETB</span>
+                </div>
+                <div className="flex justify-between items-center text-xs text-neutral-700">
+                  <span>{dict.logged_trans}</span>
+                  <span className="font-bold">{customRange.transactionCount} {lang === 'am' ? 'ግብይቶች' : 'entries'}</span>
+                </div>
+                {Object.keys(customRange.breakDown).length > 0 && (
+                  <div className="pt-2">
+                    <p className="text-[10px] text-neutral-400 uppercase font-bold tracking-wider mb-2">{dict.rev_channels_breakout}</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      {Object.entries(customRange.breakDown).map(([channel, val]) => (
+                        <div key={channel} className="text-[10px] text-neutral-700 bg-white p-2 border border-neutral-200/50 rounded-xl flex justify-between">
+                          <span className="font-semibold">
+                            {channel === 'Telebirr' ? (lang === 'am' ? 'ቴሌብር' : 'Telebirr') :
+                             channel === 'CBE Birr' ? (lang === 'am' ? 'ሲቢኢ ብር' : 'CBE Birr') :
+                             channel === 'M-Pesa' ? (lang === 'am' ? 'ኤም-ፔሳ' : 'M-Pesa') :
+                             channel === 'Bank Transfer' ? (lang === 'am' ? 'ባንክ ማስተላለፍ' : 'Bank Transfer') :
+                             channel === 'Cash' ? (lang === 'am' ? 'ጥሬ ገንዘብ' : 'Cash') : (lang === 'am' ? 'ካርድ' : channel)}
+                          </span>
+                          <span className="font-bold font-mono">{Number(val).toFixed(0)} ETB</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Client Segment Distribution Gauges */}
+          <div className="bg-white p-6 rounded-[24px] border border-neutral-200/50 shadow-ios space-y-4">
+            <div className="flex justify-between items-center">
+              <div className="flex items-center gap-2">
+                <PieChart className="w-4 h-4 text-neutral-400" />
+                <h3 className="text-xs font-bold text-neutral-850 uppercase tracking-wider">{dict.retention_dist_title}</h3>
+              </div>
+              <span className="text-[10px] font-bold text-neutral-400 font-mono uppercase bg-neutral-50 px-2.5 py-1 border border-neutral-200/50 rounded-full">{totalClients} {dict.profiles_loaded_label}</span>
+            </div>
+
+            <div className="space-y-4">
+              
+              {/* Segment 1: Green Frequent */}
+              <div className="space-y-1.5">
+                <div className="flex justify-between text-xs font-bold">
+                  <span className="text-emerald-800 bg-emerald-50 px-2.5 py-0.5 rounded-full flex items-center gap-1.5 text-[11px] border border-emerald-100">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                    {dict.frequent_segment_lbl}
+                  </span>
+                  <span className="font-mono text-neutral-400">{freqCount} {lang === 'am' ? 'ደንበኞች' : 'clients'} ({freqPct}%)</span>
+                </div>
+                <div className="w-full bg-neutral-100 h-2 rounded-full overflow-hidden border border-neutral-200/30">
+                  <div className="bg-emerald-500 h-full rounded-full transition-all duration-500" style={{ width: `${freqPct}%` }} />
+                </div>
+              </div>
+
+              {/* Segment 2: Yellow Occasional */}
+              <div className="space-y-1.5">
+                <div className="flex justify-between text-xs font-bold">
+                  <span className="text-amber-800 bg-amber-50 px-2.5 py-0.5 rounded-full flex items-center gap-1.5 text-[11px] border border-amber-100">
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                    {dict.stable_segment_lbl}
+                  </span>
+                  <span className="font-mono text-neutral-400">{occCount} {lang === 'am' ? 'ደንበኞች' : 'clients'} ({occPct}%)</span>
+                </div>
+                <div className="w-full bg-neutral-100 h-2 rounded-full overflow-hidden border border-neutral-200/30">
+                  <div className="bg-amber-500 h-full rounded-full transition-all duration-500" style={{ width: `${occPct}%` }} />
+                </div>
+              </div>
+
+              {/* Segment 3: Red At Risk */}
+              <div className="space-y-1.5">
+                <div className="flex justify-between text-xs font-bold">
+                  <span className="text-red-800 bg-red-50 px-2.5 py-0.5 rounded-full flex items-center gap-1.5 text-[11px] border border-red-100">
+                    <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
+                    {dict.atrisk_segment_lbl}
+                  </span>
+                  <span className="font-mono text-neutral-400">{riskCount} {lang === 'am' ? 'ደንበኞች' : 'clients'} ({riskPct}%)</span>
+                </div>
+                <div className="w-full bg-neutral-100 h-2 rounded-full overflow-hidden border border-neutral-200/30">
+                  <div className="bg-red-500 h-full rounded-full transition-all duration-500" style={{ width: `${riskPct}%` }} />
+                </div>
+              </div>
+
+            </div>
+          </div>
+
+        </div>
+
+        {/* Right Hand: Service Leaderboards & Targeted Segment Data Export */}
+        <div className="space-y-6">
+          
+          {/* Service Leaderboard */}
+          <div className="bg-white p-6 rounded-[24px] border border-neutral-200/50 shadow-ios space-y-4">
+            <div className="flex items-center gap-2">
+              <Star className="w-4 h-4 text-neutral-400" />
+              <h3 className="text-xs font-bold text-neutral-850 uppercase tracking-wider">{dict.performance_title}</h3>
+            </div>
+            <p className="text-[11px] text-neutral-400 italic">{dict.leaderboard_desc}</p>
+
+            <div className="divide-y divide-neutral-100">
+              {analytics?.leaderboard.length === 0 ? (
+                <p className="text-xs text-neutral-400 py-4 text-center">{dict.no_metrics}</p>
+              ) : (
+                analytics?.leaderboard.map((item, index) => (
+                  <div key={item.name} className="py-3 flex items-center justify-between text-xs">
+                    <div className="flex items-center gap-3">
+                      <span className="w-6 h-6 rounded-lg bg-neutral-50 font-bold text-neutral-400 text-center flex items-center justify-center font-mono border border-neutral-205">
+                        #{index + 1}
+                      </span>
+                      <div>
+                        <p className="font-bold text-neutral-800">{getPredefinedNameTranslated(item.name)}</p>
+                        <p className="text-[10px] text-neutral-400 font-medium">{lang === 'am' ? 'የድግግሞሽ ብዛት፦' : 'Frequency count:'} {item.count} {lang === 'am' ? 'ጊዜያት' : 'sessions'}</p>
+                      </div>
+                    </div>
+                    <span className="font-bold text-neutral-850 font-mono bg-neutral-50 px-2.5 py-1 rounded-lg border border-neutral-200/60">{item.revenue.toFixed(0)} ETB</span>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+          {/* Export Center Container */}
+          <div className="bg-white p-6 rounded-[24px] border border-neutral-200/50 shadow-ios space-y-4" id="target-export-card">
+            <div className="flex items-center gap-2">
+              <Download className="w-4 h-4 text-neutral-400" />
+              <h3 className="text-xs font-bold text-neutral-850 uppercase tracking-wider">{dict.export_center_title}</h3>
+            </div>
+            <p className="text-[11px] text-neutral-400">{dict.export_center_desc}</p>
+
+            <div className="grid grid-cols-2 gap-2 bg-neutral-50 p-3 rounded-2xl border border-neutral-200/40">
+              <div>
+                <label className="block text-[10px] font-bold text-neutral-400 uppercase mb-1">{dict.export_segment_label}</label>
+                <select
+                  value={selectedStatus}
+                  onChange={(e: any) => setSelectedStatus(e.target.value)}
+                  className="w-full text-xs font-bold bg-white border border-neutral-250 outline-none p-2 rounded-xl text-neutral-800 focus:border-neutral-900 focus:ring-1 focus:ring-neutral-900 transition-all cursor-pointer"
+                  id="export-status-select"
+                >
+                  <option value="Green">{dict.frequent_segment_lbl}</option>
+                  <option value="Yellow">{dict.stable_segment_lbl}</option>
+                  <option value="Red">{dict.atrisk_segment_lbl}</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold text-neutral-400 uppercase mb-1">{dict.export_format_label}</label>
+                <select
+                  value={exportFormat}
+                  onChange={(e: any) => setExportFormat(e.target.value)}
+                  className="w-full text-xs font-bold bg-white border border-neutral-250 outline-none p-2 rounded-xl text-neutral-800 focus:border-neutral-900 focus:ring-1 focus:ring-neutral-900 transition-all cursor-pointer"
+                  id="export-format-select"
+                >
+                  <option value="csv">{lang === 'am' ? 'ሲኤስቪ (CSV)' : 'CSV Spreadsheet'}</option>
+                  <option value="json">{lang === 'am' ? 'ጄሰን (JSON)' : 'JSON Document'}</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Direct download trigger button */}
+            <button
+              onClick={handleDownload}
+              className="w-full py-3 bg-neutral-900 hover:bg-neutral-850 text-white font-bold text-xs rounded-full flex items-center justify-center gap-2 transition-all duration-200 shadow-ios ios-active-scale"
+              id="btn-commence-download"
+            >
+              <Download className="w-4 h-4 text-emerald-400" />
+              {dict.download_btn} ({selectedStatus === 'Green' ? dict.frequent_segment_lbl : selectedStatus === 'Yellow' ? dict.stable_segment_lbl : dict.atrisk_segment_lbl})
+            </button>
+
+            {/* Inline list preview  */}
+            <div className="border border-neutral-200/50 rounded-2xl overflow-hidden bg-neutral-50 p-3.5 space-y-3">
+              <div className="flex justify-between items-center text-xs">
+                <span className="font-extrabold text-neutral-500 uppercase tracking-wider text-[10px]">{dict.preview_title} ({previewList.length}):</span>
+                {previewList.length > 0 && (
+                  <span className="text-[9px] bg-white font-mono text-neutral-400 px-2.5 py-0.5 rounded-full border border-neutral-200/75 font-bold">
+                    {dict.preview_active_badge}
+                  </span>
+                )}
+              </div>
+              
+              {previewList.length === 0 ? (
+                <p className="text-[11px] text-neutral-400 italic text-center py-4">{dict.no_customers_in_segment}</p>
+              ) : (
+                <div className="max-h-36 overflow-y-auto space-y-1.5 pr-1" id="export-preview-list">
+                  {previewList.map(item => (
+                    <div key={item.id} className="text-[11px] p-2.5 bg-white rounded-xl border border-neutral-200/40 flex justify-between items-center shadow-xs">
+                      <div>
+                        <p className="font-bold text-neutral-800">{item.full_name}</p>
+                        <p className="text-neutral-400 text-[10px] font-mono mt-0.5">{item.phone_number}</p>
+                      </div>
+                      <span className="text-[10px] text-neutral-400 italic block">
+                        {dict.last_seen_prefix} {item.lastVisitDate ? new Date(item.lastVisitDate).toLocaleDateString(lang === 'am' ? 'am-ET' : 'en-US') : (lang === 'am' ? 'አሁን' : 'Never')}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+          </div>
+
+        </div>
+
+      </div>
+
+    </div>
+  );
+}
