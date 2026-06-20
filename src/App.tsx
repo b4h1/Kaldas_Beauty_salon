@@ -76,6 +76,12 @@ export default function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(() => {
     return localStorage.getItem('kaldas_logged_in') === 'true';
   });
+  const [userRole, setUserRole] = useState<'admin' | 'cashier' | 'assistant' | null>(() => {
+    return (localStorage.getItem('kaldas_user_role') as any) || null;
+  });
+  const [loggedInUser, setLoggedInUser] = useState<string>(() => {
+    return localStorage.getItem('kaldas_logged_user') || '';
+  });
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loginError, setLoginError] = useState('');
@@ -105,7 +111,11 @@ export default function App() {
 
     if (cleanUser === 'admin' && cleanPass === 'admin123') {
       setIsLoggedIn(true);
+      setUserRole('admin');
+      setLoggedInUser('admin');
       localStorage.setItem('kaldas_logged_in', 'true');
+      localStorage.setItem('kaldas_user_role', 'admin');
+      localStorage.setItem('kaldas_logged_user', 'admin');
       setLoginError('');
       return;
     }
@@ -113,7 +123,11 @@ export default function App() {
     const matched = staffList.find(s => s.name.trim().toLowerCase() === cleanUser && s.password === cleanPass);
     if (matched) {
       setIsLoggedIn(true);
+      setUserRole(matched.role);
+      setLoggedInUser(matched.name);
       localStorage.setItem('kaldas_logged_in', 'true');
+      localStorage.setItem('kaldas_user_role', matched.role);
+      localStorage.setItem('kaldas_logged_user', matched.name);
       setLoginError('');
     } else {
       setLoginError(lang === 'am' ? 'የተሳሳተ የተጠቃሚ ስም ወይም የይለፍ ቃል!' : 'Incorrect username or password!');
@@ -199,6 +213,10 @@ export default function App() {
 
   const handleAddStaff = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (userRole !== 'admin') {
+      alert(lang === 'am' ? 'የአስተዳዳሪ ፈቃድ ያስፈልጋል!' : 'Admin permission is required!');
+      return;
+    }
     if (!staffName.trim() || !staffPassword.trim()) return;
     try {
       const newStaffRef = doc(collection(db, 'staff'));
@@ -217,6 +235,10 @@ export default function App() {
   };
 
   const handleDeleteStaff = async (id: string) => {
+    if (userRole !== 'admin') {
+      alert(lang === 'am' ? 'የአስተዳዳሪ ፈቃድ ያስፈልጋል!' : 'Admin permission is required!');
+      return;
+    }
     try {
       await deleteDoc(doc(db, 'staff', id));
     } catch (e) {
@@ -226,6 +248,10 @@ export default function App() {
 
   const handleAddService = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (userRole !== 'admin') {
+      alert(lang === 'am' ? 'የአስተዳዳሪ ፈቃድ ያስፈልጋል!' : 'Admin permission is required!');
+      return;
+    }
     if (!newServiceName.trim() || !newServicePrice) return;
     try {
       const newRef = doc(collection(db, 'services'));
@@ -243,6 +269,10 @@ export default function App() {
   };
 
   const handleSaveServiceEdit = async (id: string) => {
+    if (userRole !== 'admin') {
+      alert(lang === 'am' ? 'የአስተዳዳሪ ፈቃድ ያስፈልጋል!' : 'Admin permission is required!');
+      return;
+    }
     if (!editingServiceName.trim() || !editingServicePrice) return;
     try {
       await updateDoc(doc(db, 'services', id), {
@@ -257,6 +287,10 @@ export default function App() {
   };
 
   const handleDeleteService = async (id: string) => {
+    if (userRole !== 'admin') {
+      alert(lang === 'am' ? 'የአስተዳዳሪ ፈቃድ ያስፈልጋል!' : 'Admin permission is required!');
+      return;
+    }
     try {
       await deleteDoc(doc(db, 'services', id));
     } catch (e) {
@@ -731,24 +765,42 @@ export default function App() {
               <p className="text-xs text-neutral-400 mt-1 font-medium">{lang === 'am' ? 'የአስተዳዳሪ መለያ ይቆጣጠሩ እና ካሽየሮችን ያክሉ ወይም ይሰርዙ።' : 'Manage administrative profile controls and expand your staff directory.'}</p>
             </div>
 
-            {/* Admin Info */}
+            {/* Active User Info */}
             <div className="bg-neutral-50 rounded-2xl p-4 border border-neutral-200/50 space-y-3">
-              <h3 className="text-xs font-extrabold uppercase tracking-widest text-[#A89F91]">{lang === 'am' ? 'አክቲቭ የአስተዳዳሪ መለያ' : 'Active Admin Profile'}</h3>
+              <h3 className="text-xs font-extrabold uppercase tracking-widest text-[#A89F91]">
+                {userRole === 'admin' 
+                  ? (lang === 'am' ? 'አክቲቭ የአስተዳዳሪ መለያ' : 'Active Admin Profile') 
+                  : (lang === 'am' ? 'አክቲቭ የሰራተኛ መለያ' : 'Active Staff Profile')}
+              </h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs font-medium">
                 <div>
-                  <span className="text-neutral-400 block">{lang === 'am' ? 'የተጠቃሚ ስም (Username):' : 'System Username:'}</span>
-                  <span className="font-bold text-neutral-800">admin</span>
+                  <span className="text-neutral-400 block">
+                    {lang === 'am' ? 'ሙሉ ስም / የተጠቃሚ ስም:' : 'Name / Username:'}
+                  </span>
+                  <span className="font-bold text-neutral-800 capitalize">{loggedInUser || 'admin'}</span>
                 </div>
                 <div>
-                  <span className="text-neutral-400 block">{lang === 'am' ? 'የይለፍ ቃል (Password):' : 'Secret Password:'}</span>
-                  <span className="font-bold text-neutral-800">•••••••• (admin)</span>
+                  <span className="text-neutral-400 block">
+                    {lang === 'am' ? 'የሲስተም ድርሻ (Role):' : 'System Role / Tier:'}
+                  </span>
+                  <span className="font-bold text-neutral-800 capitalize bg-neutral-200/65 rounded-md px-2.5 py-0.5 inline-block mt-0.5 border border-neutral-300/30">
+                    {userRole === 'admin' 
+                      ? (lang === 'am' ? 'አስተዳዳሪ (Admin)' : 'Admin') 
+                      : userRole === 'cashier' 
+                        ? (lang === 'am' ? 'ካሽየር (Cashier)' : 'Cashier') 
+                        : (lang === 'am' ? 'ረዳት (Assistant)' : 'Assistant')}
+                  </span>
                 </div>
               </div>
               <div className="pt-2 border-t border-neutral-200/40 flex justify-end">
                 <button
                   onClick={() => {
                     setIsLoggedIn(false);
+                    setUserRole(null);
+                    setLoggedInUser('');
                     localStorage.removeItem('kaldas_logged_in');
+                    localStorage.removeItem('kaldas_user_role');
+                    localStorage.removeItem('kaldas_logged_user');
                   }}
                   className="px-4 py-1.5 bg-red-55 text-red-750 hover:bg-red-100 font-bold border border-red-200/40 text-[11px] rounded-full flex items-center gap-1 transition-all ios-active-scale"
                 >
@@ -764,51 +816,62 @@ export default function App() {
                 <Users className="w-4 h-4 text-neutral-400" /> {lang === 'am' ? 'የሳሎን ካሽየሮችና ረዳቶች' : 'Salon Cashiers & Assistants'} ({staffList.length})
               </h3>
 
-              {/* Staff Form */}
-              <form onSubmit={handleAddStaff} className="bg-white rounded-2xl border border-neutral-150 p-4 space-y-3 shadow-xs">
-                <h4 className="text-xs font-bold text-neutral-850">{lang === 'am' ? 'አዲስ ሰራተኛ ጨምር' : 'Register New Staff Member'}</h4>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
-                  <div>
-                    <label className="block text-[10px] text-neutral-400 font-bold uppercase mb-1">{lang === 'am' ? 'ሙሉ ስም' : 'Staff Full Name'}</label>
-                    <input
-                      type="text"
-                      required
-                      value={staffName}
-                      onChange={(e) => setStaffName(e.target.value)}
-                      placeholder="e.g. Sofia Vergara"
-                      className="w-full bg-neutral-50 border border-neutral-200 rounded-lg p-2 text-xs focus:ring-1 focus:ring-neutral-900 focus:outline-none focus:border-neutral-900 font-medium text-neutral-800"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] text-neutral-400 font-bold uppercase mb-1">{lang === 'am' ? 'የስራ ድርሻ (Role)' : 'Assigned Role'}</label>
-                    <select
-                      value={staffRole}
-                      onChange={(e) => setStaffRole(e.target.value as any)}
-                      className="w-full bg-neutral-50 border border-neutral-200 rounded-lg p-2 text-xs focus:ring-1 focus:ring-neutral-900 focus:outline-none focus:border-neutral-900 font-bold text-neutral-800"
+              {userRole === 'admin' ? (
+                /* Staff Form */
+                <form onSubmit={handleAddStaff} className="bg-white rounded-2xl border border-neutral-150 p-4 space-y-3 shadow-xs">
+                  <h4 className="text-xs font-bold text-neutral-850">{lang === 'am' ? 'አዲስ ሰራተኛ ጨምር' : 'Register New Staff Member'}</h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
+                    <div>
+                      <label className="block text-[10px] text-neutral-400 font-bold uppercase mb-1">{lang === 'am' ? 'ሙሉ ስም' : 'Staff Full Name'}</label>
+                      <input
+                        type="text"
+                        required
+                        value={staffName}
+                        onChange={(e) => setStaffName(e.target.value)}
+                        placeholder="e.g. Sofia Vergara"
+                        className="w-full bg-neutral-50 border border-neutral-200 rounded-lg p-2 text-xs focus:ring-1 focus:ring-neutral-900 focus:outline-none focus:border-neutral-900 font-medium text-neutral-800"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] text-neutral-400 font-bold uppercase mb-1">{lang === 'am' ? 'የስራ ድርሻ (Role)' : 'Assigned Role'}</label>
+                      <select
+                        value={staffRole}
+                        onChange={(e) => setStaffRole(e.target.value as any)}
+                        className="w-full bg-neutral-50 border border-neutral-200 rounded-lg p-2 text-xs focus:ring-1 focus:ring-neutral-900 focus:outline-none focus:border-neutral-900 font-bold text-neutral-800"
+                      >
+                        <option value="cashier">{lang === 'am' ? 'ካሽየር (Cashier)' : 'Cashier'}</option>
+                        <option value="assistant">{lang === 'am' ? 'ረዳት (Assistant)' : 'Assistant'}</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[10px] text-neutral-400 font-bold uppercase mb-1">{lang === 'am' ? 'ይለፍ ቃል (Password)' : 'Password'}</label>
+                      <input
+                        type="password"
+                        required
+                        value={staffPassword}
+                        onChange={(e) => setStaffPassword(e.target.value)}
+                        placeholder="••••••••"
+                        className="w-full bg-neutral-50 border border-neutral-200 rounded-lg p-2 text-xs focus:ring-1 focus:ring-neutral-900 focus:outline-none focus:border-neutral-900 font-medium text-neutral-800"
+                      />
+                    </div>
+                    <button
+                      type="submit"
+                      className="w-full py-2 bg-neutral-900 hover:bg-neutral-800 text-white rounded-lg text-xs font-bold shadow-xs transition-all ios-active-scale hover:shadow-xs animate-fade-in"
                     >
-                      <option value="cashier">{lang === 'am' ? 'ካሽየር (Cashier)' : 'Cashier'}</option>
-                      <option value="assistant">{lang === 'am' ? 'ረዳት (Assistant)' : 'Assistant'}</option>
-                    </select>
+                      + {lang === 'am' ? 'አክል' : 'Add Staff'}
+                    </button>
                   </div>
-                  <div>
-                    <label className="block text-[10px] text-neutral-400 font-bold uppercase mb-1">{lang === 'am' ? 'ይለፍ ቃል (Password)' : 'Password'}</label>
-                    <input
-                      type="password"
-                      required
-                      value={staffPassword}
-                      onChange={(e) => setStaffPassword(e.target.value)}
-                      placeholder="••••••••"
-                      className="w-full bg-neutral-50 border border-neutral-200 rounded-lg p-2 text-xs focus:ring-1 focus:ring-neutral-900 focus:outline-none focus:border-neutral-900 font-medium text-neutral-800"
-                    />
-                  </div>
-                  <button
-                    type="submit"
-                    className="w-full py-2 bg-neutral-900 hover:bg-neutral-800 text-white rounded-lg text-xs font-bold shadow-xs transition-all ios-active-scale hover:shadow-xs animate-fade-in"
-                  >
-                    + {lang === 'am' ? 'አክል' : 'Add Staff'}
-                  </button>
+                </form>
+              ) : (
+                <div className="bg-amber-50/50 border border-amber-200/50 rounded-2xl p-4 text-xs text-amber-800 font-medium flex items-center gap-2">
+                  <Smartphone className="w-5 h-5 text-amber-600 shrink-0" />
+                  <span>
+                    {lang === 'am' 
+                      ? 'የሰራተኛ መለያዎችን ማስተዳደር ለአስተዳዳሪዎች (Admin) ብቻ የተፈቀደ ተግባር ነው።' 
+                      : 'Staff credential configuration is restricted. Only system Administrators can register or modify active staff members.'}
+                  </span>
                 </div>
-              </form>
+              )}
 
               {/* Staff table list */}
               <div className="border border-neutral-200 rounded-2xl overflow-hidden divide-y divide-neutral-100 bg-white">
@@ -821,20 +884,24 @@ export default function App() {
                         <p className="font-bold text-neutral-850">{member.name}</p>
                         <p className="text-[10px] text-neutral-400 uppercase tracking-widest mt-0.5">
                           {member.role === 'cashier' ? (lang === 'am' ? 'ካሽየር' : 'Cashier') : (lang === 'am' ? 'ረዳት' : 'Assistant')}
-                          <span className="ml-2 font-mono lowercase opacity-75">({lang === 'am' ? 'የይለፍ ቃል' : 'password'}: {member.password})</span>
+                          {userRole === 'admin' && (
+                            <span className="ml-2 font-mono lowercase opacity-75">({lang === 'am' ? 'የይለፍ ቃል' : 'password'}: {member.password})</span>
+                          )}
                         </p>
                       </div>
                       <div className="flex items-center gap-3">
                         <span className="text-[10px] text-neutral-400 font-mono">{member.created_at ? new Date(member.created_at).toLocaleDateString() : ''}</span>
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteStaff(member.id)}
-                          className="p-1 px-3 bg-red-50 hover:bg-red-100 text-red-700 rounded-full text-[10px] font-bold flex items-center gap-1 transition-colors ios-active-scale"
-                          title="Delete staff"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                          {lang === 'am' ? 'ሰርዝ' : 'Delete'}
-                        </button>
+                        {userRole === 'admin' && (
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteStaff(member.id)}
+                            className="p-1 px-3 bg-red-50 hover:bg-red-100 text-red-700 rounded-full text-[10px] font-bold flex items-center gap-1 transition-colors ios-active-scale"
+                            title="Delete staff"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            {lang === 'am' ? 'ሰርዝ' : 'Delete'}
+                          </button>
+                        )}
                       </div>
                     </div>
                   ))
@@ -848,56 +915,67 @@ export default function App() {
                 <Sparkles className="w-4 h-4 text-neutral-400" /> {lang === 'am' ? 'የውበት አገልግሎቶችና ዋጋዎች' : 'Beauty Services & Treatments Settings'} ({salonServices.length})
               </h3>
 
-              {/* Add Service Form */}
-              <form onSubmit={handleAddService} className="bg-white rounded-2xl border border-neutral-150 p-4 space-y-3 shadow-xs">
-                <h4 className="text-xs font-bold text-neutral-850">{lang === 'am' ? 'አዲስ የአገልግሎት አይነት ጨምር' : 'Add New Salon Treatment or Service'}</h4>
-                <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 items-end">
-                  <div>
-                    <label className="block text-[10px] text-neutral-400 font-bold uppercase mb-1">{lang === 'am' ? 'የአገልግሎት ስም' : 'Service Name'}</label>
-                    <input
-                      type="text"
-                      required
-                      value={newServiceName}
-                      onChange={(e) => setNewServiceName(e.target.value)}
-                      placeholder="e.g. Balayage Hair"
-                      className="w-full bg-neutral-50 border border-neutral-200 rounded-lg p-2 text-xs focus:ring-1 focus:ring-neutral-900 focus:outline-none focus:border-neutral-900 font-medium text-neutral-800"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] text-neutral-400 font-bold uppercase mb-1">{lang === 'am' ? 'ዘርፍ (Category)' : 'Treatment Category'}</label>
-                    <select
-                      value={newServiceCategory}
-                      onChange={(e) => setNewServiceCategory(e.target.value as any)}
-                      className="w-full bg-neutral-50 border border-neutral-200 rounded-lg p-2 text-xs focus:ring-1 focus:ring-neutral-900 focus:outline-none focus:border-neutral-900 font-bold text-neutral-800"
+              {userRole === 'admin' ? (
+                /* Add Service Form */
+                <form onSubmit={handleAddService} className="bg-white rounded-2xl border border-neutral-150 p-4 space-y-3 shadow-xs">
+                  <h4 className="text-xs font-bold text-neutral-850">{lang === 'am' ? 'አዲስ የአገልግሎት አይነት ጨምር' : 'Add New Salon Treatment or Service'}</h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 items-end">
+                    <div>
+                      <label className="block text-[10px] text-neutral-400 font-bold uppercase mb-1">{lang === 'am' ? 'የአገልግሎት ስም' : 'Service Name'}</label>
+                      <input
+                        type="text"
+                        required
+                        value={newServiceName}
+                        onChange={(e) => setNewServiceName(e.target.value)}
+                        placeholder="e.g. Balayage Hair"
+                        className="w-full bg-neutral-50 border border-neutral-200 rounded-lg p-2 text-xs focus:ring-1 focus:ring-neutral-900 focus:outline-none focus:border-neutral-900 font-medium text-neutral-800"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] text-neutral-400 font-bold uppercase mb-1">{lang === 'am' ? 'ዘርፍ (Category)' : 'Treatment Category'}</label>
+                      <select
+                        value={newServiceCategory}
+                        onChange={(e) => setNewServiceCategory(e.target.value as any)}
+                        className="w-full bg-neutral-50 border border-neutral-200 rounded-lg p-2 text-xs focus:ring-1 focus:ring-neutral-900 focus:outline-none focus:border-neutral-900 font-bold text-neutral-800"
+                      >
+                        <option value="Hair">{lang === 'am' ? 'ፀጉር (Hair)' : 'Hair'}</option>
+                        <option value="Nails">{lang === 'am' ? 'ጥፍር (Nails)' : 'Nails'}</option>
+                        <option value="Skin">{lang === 'am' ? 'ቆዳ (Skin)' : 'Skin'}</option>
+                        <option value="Massage">{lang === 'am' ? 'ማሳጅ (Massage)' : 'Massage'}</option>
+                        <option value="Product">{lang === 'am' ? 'የሽያጭ ምርት (Product)' : 'Product'}</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[10px] text-neutral-400 font-bold uppercase mb-1">{lang === 'am' ? 'መደበኛ ዋጋ (ETB)' : 'Default Price (ETB)'}</label>
+                      <input
+                        type="number"
+                        required
+                        min="0"
+                        step="0.01"
+                        value={newServicePrice}
+                        onChange={(e) => setNewServicePrice(e.target.value)}
+                        placeholder="150.00"
+                        className="w-full bg-neutral-50 border border-neutral-200 rounded-lg p-2 text-xs focus:ring-1 focus:ring-neutral-900 focus:outline-none focus:border-neutral-900 font-bold text-neutral-850"
+                      />
+                    </div>
+                    <button
+                      type="submit"
+                      className="w-full py-2 bg-neutral-900 hover:bg-neutral-800 text-white rounded-lg text-xs font-bold shadow-xs transition-all ios-active-scale hover:shadow-xs"
                     >
-                      <option value="Hair">{lang === 'am' ? 'ፀጉር (Hair)' : 'Hair'}</option>
-                      <option value="Nails">{lang === 'am' ? 'ጥፍር (Nails)' : 'Nails'}</option>
-                      <option value="Skin">{lang === 'am' ? 'ቆዳ (Skin)' : 'Skin'}</option>
-                      <option value="Massage">{lang === 'am' ? 'ማሳጅ (Massage)' : 'Massage'}</option>
-                      <option value="Product">{lang === 'am' ? 'የሽያጭ ምርት (Product)' : 'Product'}</option>
-                    </select>
+                      + {lang === 'am' ? 'አገልግሎት ጨምር' : 'Add Treatment'}
+                    </button>
                   </div>
-                  <div>
-                    <label className="block text-[10px] text-neutral-400 font-bold uppercase mb-1">{lang === 'am' ? 'መደበኛ ዋጋ (ETB)' : 'Default Price (ETB)'}</label>
-                    <input
-                      type="number"
-                      required
-                      min="0"
-                      step="0.01"
-                      value={newServicePrice}
-                      onChange={(e) => setNewServicePrice(e.target.value)}
-                      placeholder="150.00"
-                      className="w-full bg-neutral-50 border border-neutral-200 rounded-lg p-2 text-xs focus:ring-1 focus:ring-neutral-900 focus:outline-none focus:border-neutral-900 font-bold text-neutral-850"
-                    />
-                  </div>
-                  <button
-                    type="submit"
-                    className="w-full py-2 bg-neutral-900 hover:bg-neutral-800 text-white rounded-lg text-xs font-bold shadow-xs transition-all ios-active-scale hover:shadow-xs"
-                  >
-                    + {lang === 'am' ? 'አገልግሎት ጨምር' : 'Add Treatment'}
-                  </button>
+                </form>
+              ) : (
+                <div className="bg-amber-50/50 border border-amber-200/50 rounded-2xl p-4 text-xs text-amber-800 font-medium flex items-center gap-2">
+                  <Smartphone className="w-5 h-5 text-amber-600 shrink-0" />
+                  <span>
+                    {lang === 'am' 
+                      ? 'የውበት አገልግሎቶችንና ዋጋዎችን ማሻሻል ለአስተዳዳሪዎች (Admin) ብቻ የተፈቀደ ተግባር ነው።' 
+                      : 'Salon Treatment config is restricted. Only system Administrators can define, update, or delete catalog services and prices.'}
+                  </span>
                 </div>
-              </form>
+              )}
 
               {/* Services List Table */}
               <div className="border border-neutral-200 rounded-2xl overflow-hidden divide-y divide-neutral-100 bg-white">
@@ -950,49 +1028,51 @@ export default function App() {
                           </div>
                         )}
 
-                        <div className="flex items-center gap-2 justify-end">
-                          {isEditing ? (
-                            <>
-                              <button
-                                type="button"
-                                onClick={() => handleSaveServiceEdit(srv.id)}
-                                className="px-3 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 rounded-full text-[10px] font-bold transition-all"
-                              >
-                                {lang === 'am' ? 'አስቀምጥ' : 'Save'}
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => setEditingServiceId(null)}
-                                className="px-3 py-1 bg-neutral-100 text-neutral-700 rounded-full text-[10px] font-bold transition-all"
-                              >
-                                {lang === 'am' ? 'ተው' : 'Cancel'}
-                              </button>
-                            </>
-                          ) : (
-                            <>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setEditingServiceId(srv.id);
-                                  setEditingServiceName(srv.name);
-                                  setEditingServiceCategory(srv.category as any);
-                                  setEditingServicePrice(String(srv.defaultPrice));
-                                }}
-                                className="p-1 px-3 bg-neutral-100 hover:bg-neutral-200/80 text-neutral-750 rounded-full text-[10px] font-bold transition-all"
-                              >
-                                {lang === 'am' ? 'አስተካክል' : 'Edit'}
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handleDeleteService(srv.id)}
-                                className="p-1 px-3 bg-red-50 hover:bg-red-100 text-red-700 rounded-full text-[10px] font-bold flex items-center gap-1 transition-colors"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                                {lang === 'am' ? 'ሰርዝ' : 'Delete'}
-                              </button>
-                            </>
-                          )}
-                        </div>
+                        {userRole === 'admin' && (
+                          <div className="flex items-center gap-2 justify-end">
+                            {isEditing ? (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => handleSaveServiceEdit(srv.id)}
+                                  className="px-3 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 rounded-full text-[10px] font-bold transition-all"
+                                >
+                                  {lang === 'am' ? 'አስቀምጥ' : 'Save'}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setEditingServiceId(null)}
+                                  className="px-3 py-1 bg-neutral-100 text-neutral-700 rounded-full text-[10px] font-bold transition-all"
+                                >
+                                  {lang === 'am' ? 'ተው' : 'Cancel'}
+                                </button>
+                              </>
+                            ) : (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEditingServiceId(srv.id);
+                                    setEditingServiceName(srv.name);
+                                    setEditingServiceCategory(srv.category as any);
+                                    setEditingServicePrice(String(srv.defaultPrice));
+                                  }}
+                                  className="p-1 px-3 bg-neutral-100 hover:bg-neutral-200/80 text-neutral-750 rounded-full text-[10px] font-bold transition-all"
+                                >
+                                  {lang === 'am' ? 'አስተካክል' : 'Edit'}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteService(srv.id)}
+                                  className="p-1 px-3 bg-red-50 hover:bg-red-100 text-red-700 rounded-full text-[10px] font-bold flex items-center gap-1 transition-colors"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                  {lang === 'am' ? 'ሰርዝ' : 'Delete'}
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        )}
                       </div>
                     );
                   })
