@@ -5,7 +5,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { CustomerWithRetention, Language, Visit, PREDEFINED_SERVICES } from './types';
-import { TRANSLATIONS } from './translations';
+import { TRANSLATIONS, translateName, translateServiceName, translateCategory, translateSkills } from './translations';
 import RegistrationForm from './components/RegistrationForm';
 import CheckInModal from './components/CheckInModal';
 import ClientDashboard from './components/ClientDashboard';
@@ -287,14 +287,14 @@ export default function App() {
       alert(lang === 'am' ? 'የአስተዳዳሪ ፈቃድ ያስፈልጋል!' : 'Admin permission is required!');
       return;
     }
-    if (!artistName.trim() || !artistSkills.trim()) return;
+    if (!artistName.trim()) return;
     try {
       const newArtRef = doc(collection(db, 'artists'));
       await setDoc(newArtRef, {
         id: newArtRef.id,
         name: artistName.trim(),
-        skills: artistSkills.trim(),
-        specialty: artistSpecialty,
+        skills: '',
+        specialty: 'General',
         created_at: new Date().toISOString()
       });
       setArtistName('');
@@ -957,7 +957,7 @@ export default function App() {
                   staffList.map((member) => (
                     <div key={member.id} className="p-3 px-4 flex items-center justify-between text-xs hover:bg-neutral-50/50">
                       <div>
-                        <p className="font-bold text-neutral-850">{member.name}</p>
+                        <p className="font-bold text-neutral-850">{translateName(member.name, lang)}</p>
                         <p className="text-[10px] text-neutral-400 uppercase tracking-widest mt-0.5">
                           {member.role === 'cashier' ? (lang === 'am' ? 'ካሽየር (Cashier)' : 'Cashier') :
                            member.role === 'assistant' ? (lang === 'am' ? 'ረዳት (Assistant)' : 'Assistant') :
@@ -998,8 +998,8 @@ export default function App() {
                 /* Artist Form */
                 <form onSubmit={handleAddArtist} className="bg-white rounded-2xl border border-neutral-150 p-4 space-y-3 shadow-xs animate-fade-in">
                   <h4 className="text-xs font-bold text-neutral-850">{lang === 'am' ? 'አዲስ የውበት ባለሙያ ጨምር' : 'Register New Treatment Artist / Provider'}</h4>
-                  <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 items-end">
-                    <div className="sm:col-span-1">
+                  <div className="flex flex-col sm:flex-row gap-3 items-end">
+                    <div className="flex-1">
                       <label className="block text-[10px] text-neutral-400 font-bold uppercase mb-1">{lang === 'am' ? 'ባለሙያ ሙሉ ስም' : 'Artist Full Name'}</label>
                       <input
                         type="text"
@@ -1010,34 +1010,9 @@ export default function App() {
                         className="w-full bg-neutral-50 border border-neutral-200 rounded-lg p-2 text-xs focus:ring-1 focus:ring-neutral-900 focus:outline-none focus:border-neutral-900 font-medium text-neutral-800"
                       />
                     </div>
-                    <div>
-                      <label className="block text-[10px] text-neutral-400 font-bold uppercase mb-1">{lang === 'am' ? 'የሙያ ዘርፍ (Specialty)' : 'Specialty Category'}</label>
-                      <select
-                        value={artistSpecialty}
-                        onChange={(e) => setArtistSpecialty(e.target.value as any)}
-                        className="w-full bg-neutral-50 border border-neutral-200 rounded-lg p-2 text-xs focus:ring-1 focus:ring-neutral-900 focus:outline-none focus:border-neutral-900 font-bold text-neutral-800"
-                      >
-                        <option value="Hair">{lang === 'am' ? 'የፀጉር (Hair)' : 'Hair'}</option>
-                        <option value="Nails">{lang === 'am' ? 'የጥፍር (Nails)' : 'Nails'}</option>
-                        <option value="Skin">{lang === 'am' ? 'የፊት/ቆዳ (Skin)' : 'Skin'}</option>
-                        <option value="Massage">{lang === 'am' ? 'ማሳጅ (Massage)' : 'Massage'}</option>
-                        <option value="General">{lang === 'am' ? 'አጠቃላይ (General)' : 'General'}</option>
-                      </select>
-                    </div>
-                    <div className="sm:col-span-1">
-                      <label className="block text-[10px] text-neutral-400 font-bold uppercase mb-1">{lang === 'am' ? 'ክህሎቶች / ልዩ ችሎታ' : 'Skills & Talents'}</label>
-                      <input
-                        type="text"
-                        required
-                        value={artistSkills}
-                        onChange={(e) => setArtistSkills(e.target.value)}
-                        placeholder="e.g. Balayage, Braiding, Acrylics"
-                        className="w-full bg-neutral-50 border border-neutral-200 rounded-lg p-2 text-xs focus:ring-1 focus:ring-neutral-900 focus:outline-none focus:border-neutral-900 font-medium text-neutral-800"
-                      />
-                    </div>
                     <button
                       type="submit"
-                      className="w-full py-2 bg-neutral-900 hover:bg-neutral-800 text-white rounded-lg text-xs font-bold shadow-xs transition-all ios-active-scale"
+                      className="w-full sm:w-auto px-6 py-2 bg-neutral-900 hover:bg-neutral-800 text-white rounded-lg text-xs font-bold shadow-xs transition-all ios-active-scale whitespace-nowrap h-[34px]"
                     >
                       + {lang === 'am' ? 'ባለሙያ አክል' : 'Add Artist'}
                     </button>
@@ -1062,20 +1037,7 @@ export default function App() {
                   artistsList.map((art) => (
                     <div key={art.id} className="p-3 px-4 flex items-center justify-between text-xs hover:bg-neutral-50/50">
                       <div>
-                        <div className="flex items-center gap-2">
-                          <p className="font-bold text-neutral-850">{art.name}</p>
-                          <span className="text-[9px] font-bold bg-neutral-100 text-neutral-600 px-2 py-0.5 rounded border border-neutral-200/40">
-                            {lang === 'am' ? (
-                              art.specialty === 'Hair' ? 'የፀጉር (Hair)' :
-                              art.specialty === 'Nails' ? 'የጥፍር (Nails)' :
-                              art.specialty === 'Skin' ? 'የፊት/ቆዳ (Skin)' :
-                              art.specialty === 'Massage' ? 'ማሳጅ (Massage)' : 'አጠቃላይ (General)'
-                            ) : art.specialty}
-                          </span>
-                        </div>
-                        <p className="text-[10px] text-neutral-400 mt-1 font-medium italic">
-                          {lang === 'am' ? 'ልዩ ችሎታዎች: ' : 'Skills: '} {art.skills}
-                        </p>
+                        <p className="font-bold text-neutral-850">{translateName(art.name, lang)}</p>
                       </div>
                       <div className="flex items-center gap-3">
                         <span className="text-[10px] text-neutral-400 font-mono">{art.created_at ? new Date(art.created_at).toLocaleDateString() : ''}</span>
@@ -1209,8 +1171,8 @@ export default function App() {
                         ) : (
                           <div>
                             <p className="font-bold text-neutral-850 flex items-center gap-1.5">
-                              {srv.name}
-                              <span className="text-[9px] uppercase font-black text-neutral-400 bg-neutral-50 border border-neutral-200/50 rounded-full px-1.5 py-0.5">{srv.category}</span>
+                              {translateServiceName(srv.id, srv.name, lang)}
+                              <span className="text-[9px] uppercase font-black text-neutral-400 bg-neutral-50 border border-neutral-200/50 rounded-full px-1.5 py-0.5">{translateCategory(srv.category, lang)}</span>
                             </p>
                             <p className="text-neutral-400 text-[10.5px] mt-0.5 font-bold font-mono">{Number(srv.defaultPrice).toFixed(2)} ETB</p>
                           </div>

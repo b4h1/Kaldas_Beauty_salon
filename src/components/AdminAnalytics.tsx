@@ -5,8 +5,8 @@
 
 import React, { useState, useEffect } from 'react';
 import { Language, CustomerWithRetention, Visit, SalonService, TreatmentArtist } from '../types';
-import { Dict } from '../translations';
-import { AreaChart, TrendingUp, Download, PieChart, Star, Calendar, RefreshCcw, Landmark, CreditCard, DollarSign, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Dict, translateName, translateServiceName } from '../translations';
+import { AreaChart, TrendingUp, Download, PieChart, Star, Calendar, RefreshCcw, Landmark, CreditCard, DollarSign, ChevronLeft, ChevronRight, Users, Award, Sparkles, Clock } from 'lucide-react';
 
 interface AnalyticsPayload {
   revenue: {
@@ -121,7 +121,7 @@ export default function AdminAnalytics({
 
       items.forEach(itemId => {
         const def = salonServices.find(s => s.id === itemId);
-        const name = def ? def.name : itemId;
+        const name = def ? translateServiceName(def.id, def.name, lang) : itemId;
         if (!serviceLeaderboard[itemId]) {
           serviceLeaderboard[itemId] = { count: 0, name, revenue: 0 };
         }
@@ -188,6 +188,91 @@ export default function AdminAnalytics({
     const statusParam = selectedStatus === 'Green' ? 'Frequent' : selectedStatus === 'Yellow' ? 'Occasional' : 'At-Risk';
     return customers.filter(c => c.retentionStatus === statusParam);
   }, [selectedStatus, customers]);
+
+  // Compute live stylist performance metrics of the month
+  const staffPerformance = React.useMemo(() => {
+    const curTime = new Date();
+    const currentYear = curTime.getFullYear();
+    const currentMonth = curTime.getMonth();
+
+    return (artistsList || []).map((a) => {
+      const roleLabel = lang === 'am' ? 'የውበት ባለሙያ' : 'Treatment Artist';
+
+      const memberVisits = allVisits.filter(v => {
+        if (!v.assigned_staff_id) return false;
+        return v.assigned_staff_id.split(',').map(s => s.trim()).includes(a.id);
+      });
+      
+      let valueMonth = 0;
+      let visitsMonth = 0;
+      const uniqueClientsMonthSet = new Set<string>();
+
+      memberVisits.forEach(v => {
+        const vDate = new Date(v.visit_date);
+        if (vDate.getFullYear() === currentYear && vDate.getMonth() === currentMonth) {
+          valueMonth += Number(v.price_charged || 0);
+          visitsMonth++;
+          if (v.customer_id) {
+            uniqueClientsMonthSet.add(v.customer_id);
+          }
+        }
+      });
+
+      const clientsMonth = uniqueClientsMonthSet.size;
+
+      const servedCustomerIds = Array.from(new Set(memberVisits.map(v => v.customer_id)));
+      let retainedCount = 0;
+      servedCustomerIds.forEach(cid => {
+        const cust = customers.find(c => c.id === cid);
+        if (cust && (cust.retentionStatus === 'Frequent' || cust.retentionStatus === 'Occasional')) {
+          retainedCount++;
+        }
+      });
+      const retentionRate = servedCustomerIds.length > 0 
+        ? Math.round((retainedCount / servedCustomerIds.length) * 100) 
+        : 0;
+
+      const slotsCount = {
+        Morning: 0,
+        Afternoon: 0,
+        Evening: 0,
+        Night: 0
+      };
+
+      memberVisits.forEach(v => {
+        const vDate = new Date(v.visit_date);
+        if (vDate.getFullYear() === currentYear && vDate.getMonth() === currentMonth) {
+          const hours = vDate.getHours();
+          if (hours >= 8 && hours < 12) slotsCount.Morning++;
+          else if (hours >= 12 && hours < 16) slotsCount.Afternoon++;
+          else if (hours >= 16 && hours < 20) slotsCount.Evening++;
+          else slotsCount.Night++;
+        }
+      });
+
+      let highestSlot = '';
+      let maxCount = 0;
+      if (slotsCount.Morning > maxCount) { maxCount = slotsCount.Morning; highestSlot = lang === 'am' ? 'ማለዳ (8-12 ሰዓት)' : 'Morning (8-12)'; }
+      if (slotsCount.Afternoon > maxCount) { maxCount = slotsCount.Afternoon; highestSlot = lang === 'am' ? 'ከሰዓት (12-4 ሰዓት)' : 'Afternoon (12-4)'; }
+      if (slotsCount.Evening > maxCount) { maxCount = slotsCount.Evening; highestSlot = lang === 'am' ? 'ምሽት (4-8 ሰዓት)' : 'Evening (4-8)'; }
+      if (slotsCount.Night > maxCount) { maxCount = slotsCount.Night; highestSlot = lang === 'am' ? 'ሌሊት (8-12 ሰዓት)' : 'Night (8-12)'; }
+
+      if (maxCount === 0) {
+        highestSlot = lang === 'am' ? 'ያልተወሰነ' : 'Flexible';
+      }
+
+      return {
+        id: a.id,
+        name: translateName(a.name, lang),
+        role: roleLabel,
+        valueMonth,
+        visitsMonth,
+        clientsMonth,
+        retentionRate,
+        highestSlot
+      };
+    }).sort((a, b) => b.valueMonth - a.valueMonth || b.visitsMonth - a.visitsMonth);
+  }, [artistsList, allVisits, customers, lang]);
 
   // Calculate percentages for segment progressive gauges
   const freqCount = analytics.distribution.Frequent;
@@ -327,73 +412,74 @@ export default function AdminAnalytics({
         {/* Left Hand: Custom Date Range Queries & Client Segment Distribs */}
         <div className="space-y-6">
           
-          {/* Custom Queries Box */}
+          {/* Dynamic Stylist Performance Hub */}
           <div className="bg-white p-6 rounded-[24px] border border-neutral-200/50 shadow-ios space-y-4">
-            <div className="flex items-center gap-2">
-              <Calendar className="w-4 h-4 text-neutral-400" />
-              <h3 className="text-xs font-bold text-neutral-850 uppercase tracking-wider">{dict.calc_title}</h3>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Users className="w-4 h-4 text-[#A89F91]" />
+                <h3 className="text-xs font-bold text-neutral-850 uppercase tracking-wider">
+                  {lang === 'am' ? 'የባለሙያዎች የክንውን ማዕከል' : 'Dynamic Stylist Performance Hub'}
+                </h3>
+              </div>
+              <span className="text-[10px] font-bold text-neutral-400 font-mono uppercase bg-neutral-50 px-2 py-0.5 border border-neutral-200/40 rounded-md">
+                {lang === 'am' ? 'በዚህ ወር' : 'THIS MONTH'}
+              </span>
             </div>
 
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="block text-[10px] font-bold text-neutral-400 uppercase">{dict.label_start_date}</label>
-                <input
-                  type="date"
-                  value={startDate}
-                  onChange={(e) => setStartDate(e.target.value)}
-                  className="w-full px-3 py-2 text-xs bg-neutral-50 border border-neutral-200/60 rounded-xl mt-1 focus:outline-none focus:border-neutral-900 focus:ring-1 focus:ring-neutral-900 transition-all text-neutral-800"
-                  id="query-start-date"
-                />
-              </div>
-              <div>
-                <label className="block text-[10px] font-bold text-neutral-400 uppercase">{dict.label_end_date}</label>
-                <input
-                  type="date"
-                  value={endDate}
-                  onChange={(e) => setEndDate(e.target.value)}
-                  className="w-full px-3 py-2 text-xs bg-neutral-50 border border-neutral-200/60 rounded-xl mt-1 focus:outline-none focus:border-neutral-900 focus:ring-1 focus:ring-neutral-900 transition-all text-neutral-800"
-                  id="query-end-date"
-                />
-              </div>
-              <div
-                className="col-span-2 py-2 px-4 bg-[#FAF9F6] border border-[#E5D5C8]/45 text-neutral-800 text-xs font-bold rounded-xl mt-2 text-center select-none"
-                id="btn-trigger-custom-range"
-              >
-                ⚡ {lang === 'am' ? 'በእውነተኛ ሰዓት የተሰላ' : 'Calculated in Real-Time'}
-              </div>
-            </div>
+            <p className="text-[11px] text-neutral-400 leading-relaxed font-medium">
+              {lang === 'am' 
+                ? 'በዚህ ወር የባለሙያዎችን የስራ ክንውን፣ ያስመዘገቡትን ጠቅላላ ገቢ እና ያገለገሏቸውን ደንበኞች ብዛት ይከታተሉ።' 
+                : 'Monthly performance tracker of salon stylists, including accumulated earnings and clients served.'}
+            </p>
 
-            {customRange && (
-              <div className="p-4 bg-neutral-50 rounded-2xl border border-neutral-200/50 space-y-3">
-                <div className="flex justify-between items-center border-b border-neutral-200/40 pb-2">
-                  <span className="text-xs font-semibold text-neutral-600">{dict.gross_range_revenue}</span>
-                  <span className="text-base font-extrabold text-neutral-950">{customRange.totalRevenue.toFixed(2)} ETB</span>
+            <div className="space-y-3 pt-2">
+              {staffPerformance.length === 0 ? (
+                <div className="text-center py-6 text-neutral-400 text-xs font-medium">
+                  {lang === 'am' ? 'ምንም ባለሙያዎች አልተመዘገቡም።' : 'No stylists registered.'}
                 </div>
-                <div className="flex justify-between items-center text-xs text-neutral-700">
-                  <span>{dict.logged_trans}</span>
-                  <span className="font-bold">{customRange.transactionCount} {lang === 'am' ? 'ግብይቶች' : 'entries'}</span>
-                </div>
-                {Object.keys(customRange.breakDown).length > 0 && (
-                  <div className="pt-2">
-                    <p className="text-[10px] text-neutral-400 uppercase font-bold tracking-wider mb-2">{dict.rev_channels_breakout}</p>
-                    <div className="grid grid-cols-2 gap-2">
-                      {Object.entries(customRange.breakDown).map(([channel, val]) => (
-                        <div key={channel} className="text-[10px] text-neutral-700 bg-white p-2 border border-neutral-200/50 rounded-xl flex justify-between">
-                          <span className="font-semibold">
-                            {channel === 'Telebirr' ? (lang === 'am' ? 'ቴሌብር' : 'Telebirr') :
-                             channel === 'CBE Birr' ? (lang === 'am' ? 'ሲቢኢ ብር' : 'CBE Birr') :
-                             channel === 'M-Pesa' ? (lang === 'am' ? 'ኤም-ፔሳ' : 'M-Pesa') :
-                             channel === 'Bank Transfer' ? (lang === 'am' ? 'ባንክ ማስተላለፍ' : 'Bank Transfer') :
-                             channel === 'Cash' ? (lang === 'am' ? 'ጥሬ ገንዘብ' : 'Cash') : (lang === 'am' ? 'ካርድ' : channel)}
+              ) : (
+                staffPerformance.map((item) => (
+                  <div key={item.id} className="p-3 bg-neutral-50 hover:bg-neutral-100/50 rounded-2xl border border-neutral-200/40 flex items-center justify-between transition-all duration-300">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-full bg-[#FAF9F6] border border-[#E5D5C8]/40 flex items-center justify-center font-bold text-neutral-700 text-xs shrink-0">
+                        {item.name.substring(0, 2).toUpperCase()}
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <p className="text-xs font-bold text-neutral-800">{item.name}</p>
+                          <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-neutral-150 text-neutral-600 border border-neutral-200/45">
+                            {item.role}
                           </span>
-                          <span className="font-bold font-mono">{Number(val).toFixed(0)} ETB</span>
                         </div>
-                      ))}
+                        <div className="flex items-center gap-3 mt-1 text-[10px] text-neutral-400 font-medium">
+                          <span>
+                            {lang === 'am' ? 'ደንበኞች በዚህ ወር: ' : 'Clients this Month: '} 
+                            <span className="font-bold text-neutral-700">{item.clientsMonth}</span>
+                          </span>
+                          <span className="w-1 h-1 rounded-full bg-neutral-300" />
+                          <span>
+                            {lang === 'am' ? 'ቀጠሮዎች በዚህ ወር: ' : 'Visits this Month: '} 
+                            <span className="font-bold text-neutral-700">{item.visitsMonth}</span>
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="text-right space-y-1">
+                      <div className="text-xs font-extrabold text-neutral-900 font-mono">
+                        ETB {item.valueMonth.toFixed(0)}
+                      </div>
+                      <div>
+                        <span className="inline-flex items-center gap-1 text-[9px] font-bold bg-amber-50 text-amber-700 border border-amber-200/35 px-2 py-0.5 rounded-md">
+                          <Clock className="w-2.5 h-2.5 shrink-0" />
+                          {item.highestSlot}
+                        </span>
+                      </div>
                     </div>
                   </div>
-                )}
-              </div>
-            )}
+                ))
+              )}
+            </div>
           </div>
 
           {/* Client Segment Distribution Gauges */}
@@ -614,32 +700,29 @@ export default function AdminAnalytics({
                       {(v.assigned_staff_id || v.equipment_used) && (
                         <div className="flex flex-wrap gap-1.5 mt-0.5">
                           {v.assigned_staff_id && (() => {
-                            const matchedStaff = (artistsList || []).find(s => s.id === v.assigned_staff_id) || staffList.find(s => s.id === v.assigned_staff_id);
-                            if (!matchedStaff) return null;
-                            const getRoleLabelStr = (role: string) => {
-                              if (lang === 'am') {
-                                if (role === 'cashier') return 'ካሽየር';
-                                if (role === 'assistant') return 'ረዳት';
-                                if (role === 'Hair') return 'የፀጉር';
-                                if (role === 'Nails') return 'የጥፍር';
-                                if (role === 'Skin') return 'የፊት/ቆዳ';
-                                if (role === 'Massage') return 'ማሳጅ';
-                                return role;
+                            const ids = v.assigned_staff_id.split(',').map(s => s.trim()).filter(Boolean);
+                            return ids.map(id => {
+                              const matchedStaff = (artistsList || []).find(s => s.id === id) || staffList.find(s => s.id === id);
+                              if (!matchedStaff) return null;
+                              let roleLabelStr = '';
+                              if ('role' in matchedStaff) {
+                                const role = (matchedStaff as any).role;
+                                if (role === 'cashier') {
+                                  roleLabelStr = lang === 'am' ? 'ካሽየር' : 'Cashier';
+                                } else if (role === 'assistant') {
+                                  roleLabelStr = lang === 'am' ? 'ረዳት' : 'Assistant';
+                                } else {
+                                  roleLabelStr = lang === 'am' ? 'የውበት ባለሙያ' : 'Treatment Artist';
+                                }
+                              } else {
+                                roleLabelStr = lang === 'am' ? 'የውበት ባለሙያ' : 'Treatment Artist';
                               }
-                              if (role === 'cashier') return 'Cashier';
-                              if (role === 'assistant') return 'Assistant';
-                              if (role === 'Hair') return 'Hair Artist';
-                              if (role === 'Nails') return 'Nail Artist';
-                              if (role === 'Skin') return 'Skin Specialist';
-                              if (role === 'Massage') return 'Masseuse';
-                              return role;
-                            };
-                            const role = ('specialty' in matchedStaff) ? (matchedStaff as any).specialty : (matchedStaff as any).role;
-                            return (
-                              <span className="inline-flex items-center gap-1 text-[9px] font-bold bg-neutral-150 text-neutral-700 px-1.5 py-0.5 rounded border border-neutral-200/30">
-                                👤 {matchedStaff.name} ({getRoleLabelStr(role)})
-                              </span>
-                            );
+                              return (
+                                <span key={id} className="inline-flex items-center gap-1 text-[9px] font-bold bg-neutral-150 text-neutral-700 px-1.5 py-0.5 rounded border border-neutral-200/30">
+                                  👤 {translateName(matchedStaff.name, lang)} ({roleLabelStr})
+                                </span>
+                              );
+                            });
                           })()}
                           {v.equipment_used && (
                             <span className="inline-flex items-center gap-1 text-[9px] font-bold bg-amber-50 text-amber-800 px-1.5 py-0.5 rounded border border-amber-100/55">

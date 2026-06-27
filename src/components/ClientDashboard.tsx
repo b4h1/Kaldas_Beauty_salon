@@ -5,7 +5,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { CustomerWithRetention, Visit, PREDEFINED_SERVICES, Language, TreatmentArtist } from '../types';
-import { Dict } from '../translations';
+import { Dict, translateName, translateServiceName } from '../translations';
 import { Phone, Calendar, ClipboardList, PenTool, Check, Notebook, Clock, FileSpreadsheet, Plus, Edit2, Save, X as CloseIcon } from 'lucide-react';
 import { doc, updateDoc } from 'firebase/firestore';
 import { db, OperationType, handleFirestoreError } from '../lib/firebase';
@@ -137,23 +137,9 @@ export default function ClientDashboard({ customer, onLogVisitForCustomer, onRef
   const segment = getSegmentAttr(customer.retentionStatus);
 
   const getServiceName = (srvId: string) => {
-    if (lang === 'am') {
-      const amharicNames: Record<string, string> = {
-        'srv_1': 'ልዩ የፀጉር ቀለም መቀየር (Balayage)',
-        'srv_2': 'ፊት ማጽዳትና ማደስ (Hydrafacial)',
-        'srv_3': 'የቅንጦት ጥፍር ውበትና እጅ ማሳጅ (Manicure)',
-        'srv_4': 'የእግር ማጽዳትና ህክምና (Pedicare)',
-        'srv_5': 'ደንበኛን ዘና የሚያደርግ የሰውነት ማሳጅ (Deep Tissue)',
-        'srv_6': 'የፀጉር ምግብና የእንክብካቤ ህክምና (Keratin)',
-        'srv_7': 'ቅንጦት ፀጉር ማድረቅና ስታይል (Blowout)',
-        'srv_8': 'የኮላጅን ፊት ማስክ ህክምና',
-        'prod_9': 'ለፀጉር ማሳመሪያ የሚሆን የአርጋን ዘይት (ሽያጭ)',
-        'prod_10': 'ኦርጋኒክ የእፅዋት የፊት ማጽጃ ጄል (ሽያጭ)'
-      };
-      return amharicNames[srvId] || srvId;
-    }
     const match = PREDEFINED_SERVICES.find(s => s.id === srvId);
-    return match ? match.name : srvId;
+    const fallbackName = match ? match.name : srvId;
+    return translateServiceName(srvId, fallbackName, lang);
   };
 
   // Maps IDs back to beautiful labels
@@ -420,32 +406,29 @@ export default function ClientDashboard({ customer, onLogVisitForCustomer, onRef
                           {(h.assigned_staff_id || h.equipment_used) && (
                             <div className="flex flex-wrap gap-2 mt-1.5">
                               {h.assigned_staff_id && (() => {
-                                const matchedStaff = artistsList.find(s => s.id === h.assigned_staff_id) || staffList.find(s => s.id === h.assigned_staff_id);
-                                if (!matchedStaff) return null;
-                                const getRoleLabelStr = (role: string) => {
-                                  if (lang === 'am') {
-                                    if (role === 'cashier') return 'ካሽየር';
-                                    if (role === 'assistant') return 'ረዳት';
-                                    if (role === 'Hair') return 'የፀጉር ባለሙያ';
-                                    if (role === 'Nails') return 'የጥፍር ባለሙያ';
-                                    if (role === 'Skin') return 'የፊት/ቆዳ ባለሙያ';
-                                    if (role === 'Massage') return 'የማሳጅ ባለሙያ';
-                                    return role;
+                                const ids = h.assigned_staff_id.split(',').map(s => s.trim()).filter(Boolean);
+                                return ids.map(id => {
+                                  const matchedStaff = (artistsList || []).find(s => s.id === id) || staffList.find(s => s.id === id);
+                                  if (!matchedStaff) return null;
+                                  let roleLabelStr = '';
+                                  if ('role' in matchedStaff) {
+                                    const role = (matchedStaff as any).role;
+                                    if (role === 'cashier') {
+                                      roleLabelStr = lang === 'am' ? 'ካሽየር' : 'Cashier';
+                                    } else if (role === 'assistant') {
+                                      roleLabelStr = lang === 'am' ? 'ረዳት' : 'Assistant';
+                                    } else {
+                                      roleLabelStr = lang === 'am' ? 'የውበት ባለሙያ' : 'Treatment Artist';
+                                    }
+                                  } else {
+                                    roleLabelStr = lang === 'am' ? 'የውበት ባለሙያ' : 'Treatment Artist';
                                   }
-                                  if (role === 'cashier') return 'Cashier';
-                                  if (role === 'assistant') return 'Assistant';
-                                  if (role === 'Hair') return 'Hair Artist';
-                                  if (role === 'Nails') return 'Nail Artist';
-                                  if (role === 'Skin') return 'Skin Specialist';
-                                  if (role === 'Massage') return 'Masseuse';
-                                  return role;
-                                };
-                                const role = ('specialty' in matchedStaff) ? (matchedStaff as any).specialty : (matchedStaff as any).role;
-                                return (
-                                  <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-neutral-100 text-neutral-700 px-2 py-0.5 rounded-md border border-neutral-200/45">
-                                    👤 {matchedStaff.name} ({getRoleLabelStr(role)})
-                                  </span>
-                                );
+                                  return (
+                                    <span key={id} className="inline-flex items-center gap-1 text-[10px] font-bold bg-neutral-100 text-neutral-700 px-2 py-0.5 rounded-md border border-neutral-200/45">
+                                      👤 {translateName(matchedStaff.name, lang)} ({roleLabelStr})
+                                    </span>
+                                  );
+                                });
                               })()}
                               {h.equipment_used && (
                                 <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-amber-50 text-amber-800 px-2 py-0.5 rounded-md border border-amber-100">

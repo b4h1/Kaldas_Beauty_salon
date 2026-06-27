@@ -5,7 +5,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { CustomerWithRetention, PaymentMethod, SalonService, Language, Visit, StaffMember, TreatmentArtist } from '../types';
-import { Dict } from '../translations';
+import { Dict, translateName, translateSkills, translateServiceName, translateCategory } from '../translations';
 import { Search, X, Check, Landmark, CreditCard, DollarSign, Receipt, Sparkles, Coins, Users, Hammer } from 'lucide-react';
 import { collection, doc, setDoc } from 'firebase/firestore';
 import { db, OperationType, handleFirestoreError } from '../lib/firebase';
@@ -46,7 +46,7 @@ export default function CheckInModal({
   const [isSuccess, setIsSuccess] = useState(false);
 
   // Custom added features states
-  const [assignedStaffId, setAssignedStaffId] = useState('');
+  const [selectedArtistIds, setSelectedArtistIds] = useState<string[]>([]);
   const [equipmentUsed, setEquipmentUsed] = useState('');
 
   // Birthday checkout override pop-up state
@@ -133,7 +133,7 @@ export default function CheckInModal({
         price_charged: Number(priceCharged),
         payment_method: paymentChannel,
         visit_date: visitDate,
-        assigned_staff_id: assignedStaffId || undefined,
+        assigned_staff_id: selectedArtistIds.join(',') || undefined,
         equipment_used: equipmentUsed.trim() || undefined
       };
 
@@ -195,36 +195,11 @@ export default function CheckInModal({
 
   // Helper dictionary of predefined service names mapped into beautiful Amharic corresponding types!
   const getServiceName = (srv: SalonService) => {
-    if (lang === 'am') {
-      const amharicNames: Record<string, string> = {
-        'srv_1': 'ልዩ የፀጉር ቀለም መቀየር (Balayage)',
-        'srv_2': 'ፊት ማጽዳትና ማደስ (Hydrafacial)',
-        'srv_3': 'የቅንጦት ጥፍር ውበትና እጅ ማሳጅ (Manicure)',
-        'srv_4': 'የእግር ማጽዳትና ህክምና (Pedicare)',
-        'srv_5': 'ደንበኛን ዘና የሚያደርግ የሰውነት ማሳጅ (Deep Tissue)',
-        'srv_6': 'የፀጉር ምግብና የእንክብካቤ ህክምና (Keratin)',
-        'srv_7': 'ቅንጦት ፀጉር ማድረቅና ስታይል (Blowout)',
-        'srv_8': 'የኮላጅን ፊት ማስክ ህክምና',
-        'prod_9': 'ለፀጉር ማሳመሪያ የሚሆን የአርጋን ዘይት (ሽያጭ)',
-        'prod_10': 'ኦርጋኒክ የእፅዋት የፊት ማጽጃ ጄል (ሽያጭ)'
-      };
-      return amharicNames[srv.id] || srv.name;
-    }
-    return srv.name;
+    return translateServiceName(srv.id, srv.name, lang);
   };
 
   const getServiceCategoryName = (category: string) => {
-    if (lang === 'am') {
-      const cats: Record<string, string> = {
-        'Hair': 'ፀጉር',
-        'Nails': 'ጥፍር',
-        'Skin': 'ቆዳ',
-        'Massage': 'ማሳጅ',
-        'Product': 'የሽያጭ ምርት'
-      };
-      return cats[category] || category;
-    }
-    return category;
+    return translateCategory(category, lang);
   };
 
   return (
@@ -389,35 +364,42 @@ export default function CheckInModal({
 
         {/* Service Provider Selection */}
         <div>
-          <label className="block text-xs font-bold text-[#A89F91] uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+          <label className="block text-xs font-bold text-[#A89F91] uppercase tracking-wider mb-2 flex items-center gap-1.5">
             <Users className="w-3.5 h-3.5 text-neutral-400" />
-            {lang === 'am' ? 'የውበት ባለሙያ / አገልግሎት የሰጠው ሰራተኛ' : 'Treatment Artist / Service Provider'}
+            {lang === 'am' ? 'የውበት ባለሙያዎች (Treatment Artists)' : 'Treatment Artists / Service Providers'}
           </label>
-          <select
-            value={assignedStaffId}
-            onChange={(e) => setAssignedStaffId(e.target.value)}
-            className="w-full px-4 py-3 text-xs bg-neutral-50 border border-neutral-200/65 rounded-xl focus:outline-none focus:border-neutral-900 focus:ring-1 focus:ring-neutral-900 font-bold text-neutral-800 transition-all"
-            id="assigned-staff-select"
-          >
-            <option value="">{lang === 'am' ? '-- ባለሙያ ይምረጡ --' : '-- Select Treatment Artist --'}</option>
-            {artistsList.map((m) => {
-              const getSpecialtyLabel = (spec: string) => {
-                if (lang === 'am') {
-                  if (spec === 'Hair') return 'የፀጉር (Hair)';
-                  if (spec === 'Nails') return 'የጥፍር (Nails)';
-                  if (spec === 'Skin') return 'የፊት/ቆዳ (Skin)';
-                  if (spec === 'Massage') return 'ማሳጅ (Massage)';
-                  return 'አጠቃላይ (General)';
-                }
-                return spec;
-              };
-              return (
-                <option key={m.id} value={m.id} className="font-medium text-neutral-800">
-                  {m.name} ({getSpecialtyLabel(m.specialty)} — {m.skills})
-                </option>
-              );
-            })}
-          </select>
+          {artistsList.length === 0 ? (
+            <p className="text-xs text-neutral-400 italic">
+              {lang === 'am' ? 'ምንም የውበት ባለሙያ አልተመዘገበም።' : 'No treatment artists registered.'}
+            </p>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              {artistsList.map((m) => {
+                const isSelected = selectedArtistIds.includes(m.id);
+                return (
+                  <button
+                    type="button"
+                    key={m.id}
+                    onClick={() => {
+                      if (isSelected) {
+                        setSelectedArtistIds(selectedArtistIds.filter((id) => id !== m.id));
+                      } else {
+                        setSelectedArtistIds([...selectedArtistIds, m.id]);
+                      }
+                    }}
+                    className={`px-3 py-2 rounded-xl border text-xs font-bold transition-all duration-200 flex items-center gap-1.5 ${
+                      isSelected
+                        ? 'bg-neutral-950 border-neutral-950 text-white shadow-ios'
+                        : 'bg-neutral-50 border-neutral-200 text-neutral-800 hover:border-neutral-400'
+                    }`}
+                  >
+                    👤 {translateName(m.name, lang)}
+                    {isSelected && <Check className="w-3.5 h-3.5 text-white" />}
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         {/* Equipment Used Custom Box Field */}

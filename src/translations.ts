@@ -339,3 +339,94 @@ export const TRANSLATIONS: Record<Language, Dict> = {
     visit_or_treatment: 'ጉብኝቱን ጨርስ እና ዋጋ መዝግብ'
   }
 };
+
+export const AMHARIC_SERVICE_NAMES: Record<string, string> = {
+  'srv_1': 'ልዩ የፀጉር ቀለም መቀየር (Balayage)',
+  'srv_2': 'ፊት ማጽዳትና ማደስ (Hydrafacial)',
+  'srv_3': 'የቅንጦት ጥፍር ውበትና እጅ ማሳጅ (Manicure)',
+  'srv_4': 'የእግር ማጽዳትና ህክምና (Pedicare)',
+  'srv_5': 'ደንበኛን ዘና የሚያደርግ የሰውነት ማሳጅ (Deep Tissue)',
+  'srv_6': 'የፀጉር ምግብና የእንክብካቤ ህክምና (Keratin)',
+  'srv_7': 'ቅንጦት ፀጉር ማድረቅና ስታይል (Blowout)',
+  'srv_8': 'የኮላጅን ፊት ማስክ ህክምና',
+  'prod_9': 'ለፀጉር ማሳመሪያ የሚሆን የአርጋን ዘይት (ሽያጭ)',
+  'prod_10': 'ኦርጋኒክ የእፅዋት የፊት ማጽጃ ጄል (ሽያጭ)'
+};
+
+export const AMHARIC_NAMES: Record<string, string> = {
+  // Staff
+  'Helen Bekele': 'ሄለን በቀለ',
+  'Zenebe Tesfaye': 'ዘነበ ተስፋዬ',
+  // Artists
+  'Sara Daniel': 'ሳራ ዳንኤል',
+  'Kidus Yohannes': 'ኪዱስ ዮሐንስ',
+  'Martha Girma': 'ማርታ ግርማ'
+};
+
+export function translateName(name: string, lang: Language): string {
+  if (lang === 'am') {
+    return AMHARIC_NAMES[name] || name;
+  }
+  return name;
+}
+
+export function translateServiceName(id: string, fallbackName: string, lang: Language): string {
+  if (lang === 'am') {
+    return AMHARIC_SERVICE_NAMES[id] || fallbackName;
+  }
+  return fallbackName;
+}
+
+export function translateCategory(category: string, lang: Language): string {
+  if (lang === 'am') {
+    const cats: Record<string, string> = {
+      'Hair': 'ፀጉር',
+      'Nails': 'ጥፍር',
+      'Skin': 'ቆዳ',
+      'Massage': 'ማሳጅ',
+      'Product': 'የሽያጭ ምርት'
+    };
+    return cats[category] || category;
+  }
+  return category;
+}
+
+export function translateSpecialty(specialty: string, lang: Language): string {
+  if (lang === 'am') {
+    const specs: Record<string, string> = {
+      'Hair': 'የፀጉር ባለሙያ',
+      'Nails': 'የጥፍር ባለሙያ',
+      'Skin': 'የፊት/ቆዳ ባለሙያ',
+      'Massage': 'የማሳጅ ባለሙያ',
+      'General': 'አጠቃላይ ባለሙያ'
+    };
+    return specs[specialty] || specialty;
+  }
+  return specialty;
+}
+
+export function translateRole(role: string, lang: Language): string {
+  if (lang === 'am') {
+    const roles: Record<string, string> = {
+      'cashier': 'ካሽየር',
+      'assistant': 'ረዳት'
+    };
+    return roles[role] || role;
+  }
+  return role;
+}
+
+export const AMHARIC_SKILLS: Record<string, string> = {
+  'Balayage, Keratin, Chic Blowout': 'ባላያጅ፣ ኬራቲን፣ ቺክ ብሎውአውት (Balayage, Keratin, Chic Blowout)',
+  'Gel Manicure, Acrylic extensions, Pedicare': 'ጄል ማኒኪዩር፣ አክሬሊክስ ኤክስቴንሽን፣ ፔዲኬር (Gel Manicure, Acrylic extensions)',
+  'Swedish Silk Massage, Hydrafacial, Collagen Mask': 'ስዊዲሽ ማሳጅ፣ ሃይድራፌሻል፣ ኮላጅን ማስክ (Swedish Massage, Hydrafacial)'
+};
+
+export function translateSkills(skills: string, lang: Language): string {
+  if (lang === 'am') {
+    return AMHARIC_SKILLS[skills] || skills;
+  }
+  return skills;
+}
+
+
