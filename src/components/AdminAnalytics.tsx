@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { Language, CustomerWithRetention, Visit, SalonService } from '../types';
+import { Language, CustomerWithRetention, Visit, SalonService, TreatmentArtist } from '../types';
 import { Dict } from '../translations';
 import { AreaChart, TrendingUp, Download, PieChart, Star, Calendar, RefreshCcw, Landmark, CreditCard, DollarSign, ChevronLeft, ChevronRight } from 'lucide-react';
 
@@ -37,6 +37,8 @@ interface AdminAnalyticsProps {
   customers?: CustomerWithRetention[];
   allVisits?: Visit[];
   salonServices?: SalonService[];
+  staffList?: any[];
+  artistsList?: TreatmentArtist[];
 }
 
 export default function AdminAnalytics({ 
@@ -44,7 +46,9 @@ export default function AdminAnalytics({
   dict, 
   customers = [], 
   allVisits = [], 
-  salonServices = [] 
+  salonServices = [],
+  staffList = [],
+  artistsList = []
 }: AdminAnalyticsProps) {
   // Custom range states
   const [startDate, setStartDate] = useState(() => {
@@ -603,6 +607,45 @@ export default function AdminAnalytics({
                               </span>
                             );
                           })}
+                        </div>
+                      )}
+
+                      {/* Artist and Equipment Badges */}
+                      {(v.assigned_staff_id || v.equipment_used) && (
+                        <div className="flex flex-wrap gap-1.5 mt-0.5">
+                          {v.assigned_staff_id && (() => {
+                            const matchedStaff = (artistsList || []).find(s => s.id === v.assigned_staff_id) || staffList.find(s => s.id === v.assigned_staff_id);
+                            if (!matchedStaff) return null;
+                            const getRoleLabelStr = (role: string) => {
+                              if (lang === 'am') {
+                                if (role === 'cashier') return 'ካሽየር';
+                                if (role === 'assistant') return 'ረዳት';
+                                if (role === 'Hair') return 'የፀጉር';
+                                if (role === 'Nails') return 'የጥፍር';
+                                if (role === 'Skin') return 'የፊት/ቆዳ';
+                                if (role === 'Massage') return 'ማሳጅ';
+                                return role;
+                              }
+                              if (role === 'cashier') return 'Cashier';
+                              if (role === 'assistant') return 'Assistant';
+                              if (role === 'Hair') return 'Hair Artist';
+                              if (role === 'Nails') return 'Nail Artist';
+                              if (role === 'Skin') return 'Skin Specialist';
+                              if (role === 'Massage') return 'Masseuse';
+                              return role;
+                            };
+                            const role = ('specialty' in matchedStaff) ? (matchedStaff as any).specialty : (matchedStaff as any).role;
+                            return (
+                              <span className="inline-flex items-center gap-1 text-[9px] font-bold bg-neutral-150 text-neutral-700 px-1.5 py-0.5 rounded border border-neutral-200/30">
+                                👤 {matchedStaff.name} ({getRoleLabelStr(role)})
+                              </span>
+                            );
+                          })()}
+                          {v.equipment_used && (
+                            <span className="inline-flex items-center gap-1 text-[9px] font-bold bg-amber-50 text-amber-800 px-1.5 py-0.5 rounded border border-amber-100/55">
+                              🛠️ {v.equipment_used}
+                            </span>
+                          )}
                         </div>
                       )}
                     </div>

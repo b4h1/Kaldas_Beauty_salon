@@ -4,11 +4,11 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { CustomerWithRetention, PaymentMethod, SalonService, Language, Visit } from '../types';
+import { CustomerWithRetention, PaymentMethod, SalonService, Language, Visit, StaffMember, TreatmentArtist } from '../types';
 import { Dict } from '../translations';
-import { Search, X, Check, Landmark, CreditCard, DollarSign, Receipt, Sparkles, Coins } from 'lucide-react';
+import { Search, X, Check, Landmark, CreditCard, DollarSign, Receipt, Sparkles, Coins, Users, Hammer } from 'lucide-react';
 import { collection, doc, setDoc } from 'firebase/firestore';
-import { db } from '../lib/firebase';
+import { db, OperationType, handleFirestoreError } from '../lib/firebase';
 import { classifyCustomer } from '../lib/retention';
 
 interface CheckInModalProps {
@@ -20,6 +20,8 @@ interface CheckInModalProps {
   dict: Dict;
   salonServices?: SalonService[];
   allVisits?: Visit[];
+  staffList?: StaffMember[];
+  artistsList?: TreatmentArtist[];
 }
 
 export default function CheckInModal({
@@ -30,7 +32,9 @@ export default function CheckInModal({
   lang,
   dict,
   salonServices = [],
-  allVisits = []
+  allVisits = [],
+  staffList = [],
+  artistsList = []
 }: CheckInModalProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCustomerId, setSelectedCustomerId] = useState('');
@@ -40,6 +44,10 @@ export default function CheckInModal({
   const [isSaving, setIsSaving] = useState(false);
   const [errorText, setErrorText] = useState('');
   const [isSuccess, setIsSuccess] = useState(false);
+
+  // Custom added features states
+  const [assignedStaffId, setAssignedStaffId] = useState('');
+  const [equipmentUsed, setEquipmentUsed] = useState('');
 
   // Birthday checkout override pop-up state
   const [showBirthdayOverlay, setShowBirthdayOverlay] = useState(false);
@@ -124,7 +132,9 @@ export default function CheckInModal({
         items_used: selectedServices,
         price_charged: Number(priceCharged),
         payment_method: paymentChannel,
-        visit_date: visitDate
+        visit_date: visitDate,
+        assigned_staff_id: assignedStaffId || undefined,
+        equipment_used: equipmentUsed.trim() || undefined
       };
 
       await setDoc(newVisitRef, newVisit);
@@ -142,6 +152,7 @@ export default function CheckInModal({
       }, 1500);
     } catch (err: any) {
       setErrorText(err.message || (lang === 'am' ? 'የኔትወርክ ግንኙነት ችግር ተከስቷል።' : 'Network anomaly sending visit record.'));
+      handleFirestoreError(err, OperationType.WRITE, 'visits');
     } finally {
       setIsSaving(false);
     }
@@ -374,6 +385,55 @@ export default function CheckInModal({
               id="price-charged-field"
             />
           </div>
+        </div>
+
+        {/* Service Provider Selection */}
+        <div>
+          <label className="block text-xs font-bold text-[#A89F91] uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+            <Users className="w-3.5 h-3.5 text-neutral-400" />
+            {lang === 'am' ? 'የውበት ባለሙያ / አገልግሎት የሰጠው ሰራተኛ' : 'Treatment Artist / Service Provider'}
+          </label>
+          <select
+            value={assignedStaffId}
+            onChange={(e) => setAssignedStaffId(e.target.value)}
+            className="w-full px-4 py-3 text-xs bg-neutral-50 border border-neutral-200/65 rounded-xl focus:outline-none focus:border-neutral-900 focus:ring-1 focus:ring-neutral-900 font-bold text-neutral-800 transition-all"
+            id="assigned-staff-select"
+          >
+            <option value="">{lang === 'am' ? '-- ባለሙያ ይምረጡ --' : '-- Select Treatment Artist --'}</option>
+            {artistsList.map((m) => {
+              const getSpecialtyLabel = (spec: string) => {
+                if (lang === 'am') {
+                  if (spec === 'Hair') return 'የፀጉር (Hair)';
+                  if (spec === 'Nails') return 'የጥፍር (Nails)';
+                  if (spec === 'Skin') return 'የፊት/ቆዳ (Skin)';
+                  if (spec === 'Massage') return 'ማሳጅ (Massage)';
+                  return 'አጠቃላይ (General)';
+                }
+                return spec;
+              };
+              return (
+                <option key={m.id} value={m.id} className="font-medium text-neutral-800">
+                  {m.name} ({getSpecialtyLabel(m.specialty)} — {m.skills})
+                </option>
+              );
+            })}
+          </select>
+        </div>
+
+        {/* Equipment Used Custom Box Field */}
+        <div>
+          <label className="block text-xs font-bold text-[#A89F91] uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+            <Hammer className="w-3.5 h-3.5 text-[#A89F91]" />
+            {lang === 'am' ? 'ጥቅም ላይ የዋሉ እቃዎች / መሳሪያዎች' : 'Equipment or Materials Used'}
+          </label>
+          <input
+            type="text"
+            value={equipmentUsed}
+            onChange={(e) => setEquipmentUsed(e.target.value)}
+            placeholder={lang === 'am' ? 'ለምሳሌ፡ የፀጉር ማድረቂያ፣ የጥፍር ማሽን፣ ቶነር...' : 'e.g. Dyson Hair Dryer, UV Gel Lamp, Steamer, Ceramic Flat Iron...'}
+            className="w-full px-4 py-3 text-xs bg-neutral-50 border border-neutral-200/65 rounded-xl focus:outline-none focus:border-neutral-900 focus:ring-1 focus:ring-neutral-900 font-bold text-neutral-800 transition-all placeholder:text-neutral-400"
+            id="equipment-used-field"
+          />
         </div>
 
         {/* Payment Channel Options selector */}

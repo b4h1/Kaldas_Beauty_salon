@@ -4,11 +4,11 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { CustomerWithRetention, Visit, PREDEFINED_SERVICES, Language } from '../types';
+import { CustomerWithRetention, Visit, PREDEFINED_SERVICES, Language, TreatmentArtist } from '../types';
 import { Dict } from '../translations';
 import { Phone, Calendar, ClipboardList, PenTool, Check, Notebook, Clock, FileSpreadsheet, Plus, Edit2, Save, X as CloseIcon } from 'lucide-react';
 import { doc, updateDoc } from 'firebase/firestore';
-import { db } from '../lib/firebase';
+import { db, OperationType, handleFirestoreError } from '../lib/firebase';
 
 interface ClientDashboardProps {
   customer: CustomerWithRetention | null;
@@ -17,9 +17,11 @@ interface ClientDashboardProps {
   lang: Language;
   dict: Dict;
   allVisits?: Visit[];
+  staffList?: any[];
+  artistsList?: TreatmentArtist[];
 }
 
-export default function ClientDashboard({ customer, onLogVisitForCustomer, onRefreshTrigger, lang, dict, allVisits = [] }: ClientDashboardProps) {
+export default function ClientDashboard({ customer, onLogVisitForCustomer, onRefreshTrigger, lang, dict, allVisits = [], staffList = [], artistsList = [] }: ClientDashboardProps) {
   const [isEditingNotes, setIsEditingNotes] = useState(false);
   const [editedNotes, setEditedNotes] = useState('');
   const [notesFeedback, setNotesFeedback] = useState(false);
@@ -66,6 +68,7 @@ export default function ClientDashboard({ customer, onLogVisitForCustomer, onRef
       onRefreshTrigger();
     } catch (e) {
       console.error('Failed to update notes in Firestore:', e);
+      handleFirestoreError(e, OperationType.UPDATE, 'customers');
     }
   };
 
@@ -88,6 +91,7 @@ export default function ClientDashboard({ customer, onLogVisitForCustomer, onRef
     } catch (e) {
       console.error('Failed to edit customer details in Firestore:', e);
       setProfileError(lang === 'am' ? 'የአውታረ መረብ ስህተት' : 'Network error updating customer profile');
+      handleFirestoreError(e, OperationType.UPDATE, 'customers');
     } finally {
       setIsSavingProfile(false);
     }
@@ -411,8 +415,45 @@ export default function ClientDashboard({ customer, onLogVisitForCustomer, onRef
                             minute: '2-digit'
                           })}
                         </td>
-                        <td className="py-3.5 px-4 text-neutral-600 font-medium max-w-xs shrink truncate">
-                          {renderItemNames(h.items_used)}
+                        <td className="py-3.5 px-4 text-neutral-600 font-medium max-w-xs shrink">
+                          <p className="font-semibold text-neutral-800">{renderItemNames(h.items_used)}</p>
+                          {(h.assigned_staff_id || h.equipment_used) && (
+                            <div className="flex flex-wrap gap-2 mt-1.5">
+                              {h.assigned_staff_id && (() => {
+                                const matchedStaff = artistsList.find(s => s.id === h.assigned_staff_id) || staffList.find(s => s.id === h.assigned_staff_id);
+                                if (!matchedStaff) return null;
+                                const getRoleLabelStr = (role: string) => {
+                                  if (lang === 'am') {
+                                    if (role === 'cashier') return 'ካሽየር';
+                                    if (role === 'assistant') return 'ረዳት';
+                                    if (role === 'Hair') return 'የፀጉር ባለሙያ';
+                                    if (role === 'Nails') return 'የጥፍር ባለሙያ';
+                                    if (role === 'Skin') return 'የፊት/ቆዳ ባለሙያ';
+                                    if (role === 'Massage') return 'የማሳጅ ባለሙያ';
+                                    return role;
+                                  }
+                                  if (role === 'cashier') return 'Cashier';
+                                  if (role === 'assistant') return 'Assistant';
+                                  if (role === 'Hair') return 'Hair Artist';
+                                  if (role === 'Nails') return 'Nail Artist';
+                                  if (role === 'Skin') return 'Skin Specialist';
+                                  if (role === 'Massage') return 'Masseuse';
+                                  return role;
+                                };
+                                const role = ('specialty' in matchedStaff) ? (matchedStaff as any).specialty : (matchedStaff as any).role;
+                                return (
+                                  <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-neutral-100 text-neutral-700 px-2 py-0.5 rounded-md border border-neutral-200/45">
+                                    👤 {matchedStaff.name} ({getRoleLabelStr(role)})
+                                  </span>
+                                );
+                              })()}
+                              {h.equipment_used && (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-amber-50 text-amber-800 px-2 py-0.5 rounded-md border border-amber-100">
+                                  🛠️ {h.equipment_used}
+                                </span>
+                              )}
+                            </div>
+                          )}
                         </td>
                         <td className="py-3.5 px-4 text-right font-bold font-mono text-neutral-800">
                           {Number(h.price_charged).toFixed(2)} ETB

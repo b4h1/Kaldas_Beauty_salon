@@ -52,6 +52,19 @@
         "created_at": { "type": "string" }
       },
       "required": ["id", "name", "role", "password", "created_at"]
+    },
+    "TreatmentArtist": {
+      "title": "TreatmentArtist",
+      "description": "Salon treatment artist or provider",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "skills": { "type": "string" },
+        "specialty": { "type": "string" },
+        "created_at": { "type": "string" }
+      },
+      "required": ["id", "name", "skills", "specialty", "created_at"]
     }
   },
   "firestore": {
@@ -70,6 +83,10 @@
     "staff": {
       "schema": "Staff",
       "description": "List of salon staff"
+    },
+    "artists": {
+      "schema": "TreatmentArtist",
+      "description": "List of salon treatment artists"
     }
   }
 }

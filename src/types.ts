@@ -32,6 +32,8 @@ export interface Visit {
   price_charged: number;
   payment_method: PaymentMethod;
   visit_date: string; // ISO string
+  assigned_staff_id?: string; // ID of the staff who performed the service
+  equipment_used?: string; // What equipment was used for the customer
 }
 
 // Retention statuses for client segment telemetry
@@ -47,6 +49,15 @@ export interface StaffMember {
   id: string;
   name: string;
   role: 'cashier' | 'assistant';
+  created_at: string;
+  password?: string;
+}
+
+export interface TreatmentArtist {
+  id: string;
+  name: string;
+  skills: string; // e.g., "Hair Coloring, Balayage, Cuts"
+  specialty: 'Hair' | 'Nails' | 'Skin' | 'Massage' | 'General';
   created_at: string;
 }
 

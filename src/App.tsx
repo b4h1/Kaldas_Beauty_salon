@@ -16,7 +16,7 @@ import salonInterior from './assets/images/luxury_beauty_salon_1781874528973.jpg
 // @ts-expect-error - Vite handles jpg asset loading, TS bypass
 import salonVector from './assets/images/salon_vector_1781800194768.jpg';
 import { collection, onSnapshot, doc, setDoc, deleteDoc, updateDoc } from 'firebase/firestore';
-import { db } from './lib/firebase';
+import { db, OperationType, handleFirestoreError } from './lib/firebase';
 import { classifyCustomer } from './lib/retention';
 import { convertToEthiopian, formatEthiopianDate } from './lib/ethiopianCalendar';
 import { 
@@ -39,7 +39,8 @@ import {
   LogOut,
   Gift,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Scissors
 } from 'lucide-react';
 
 export default function App() {
@@ -91,6 +92,12 @@ export default function App() {
   const [staffName, setStaffName] = useState('');
   const [staffRole, setStaffRole] = useState<'cashier' | 'assistant'>('cashier');
   const [staffPassword, setStaffPassword] = useState('');
+
+  // Treatment Artists state
+  const [artistsList, setArtistsList] = useState<any[]>([]);
+  const [artistName, setArtistName] = useState('');
+  const [artistSkills, setArtistSkills] = useState('');
+  const [artistSpecialty, setArtistSpecialty] = useState<'Hair' | 'Nails' | 'Skin' | 'Massage' | 'General'>('General');
 
   // Services state
   const [salonServices, setSalonServices] = useState<any[]>([]);
@@ -154,6 +161,7 @@ export default function App() {
       }
     }, (err) => {
       console.error("Firestore Staff Subscribe Error:", err);
+      handleFirestoreError(err, OperationType.LIST, 'staff');
     });
 
     return () => unsubStaff();
@@ -178,6 +186,7 @@ export default function App() {
       }
     }, (err) => {
       console.error("Firestore Services Subscribe Error:", err);
+      handleFirestoreError(err, OperationType.LIST, 'services');
     });
 
     // 2. Subscribe to Visits
@@ -189,6 +198,7 @@ export default function App() {
       setAllVisits(visitsData);
     }, (err) => {
       console.error("Firestore Visits Subscribe Error:", err);
+      handleFirestoreError(err, OperationType.LIST, 'visits');
     });
 
     // 3. Subscribe to Customers
@@ -202,12 +212,37 @@ export default function App() {
     }, (err) => {
       console.error("Firestore Customers Subscribe Error:", err);
       setLoading(false);
+      handleFirestoreError(err, OperationType.LIST, 'customers');
+    });
+
+    // 4. Subscribe to Treatment Artists
+    const unsubArtists = onSnapshot(collection(db, 'artists'), (snapshot) => {
+      const artistsData: any[] = [];
+      snapshot.forEach((doc) => {
+        artistsData.push({ id: doc.id, ...doc.data() });
+      });
+      if (snapshot.empty) {
+        const defaultArtists = [
+          { id: 'art_1', name: 'Sara Daniel', skills: 'Balayage, Keratin, Chic Blowout', specialty: 'Hair', created_at: new Date().toISOString() },
+          { id: 'art_2', name: 'Kidus Yohannes', skills: 'Gel Manicure, Acrylic extensions, Pedicare', specialty: 'Nails', created_at: new Date().toISOString() },
+          { id: 'art_3', name: 'Martha Girma', skills: 'Swedish Silk Massage, Hydrafacial, Collagen Mask', specialty: 'Massage', created_at: new Date().toISOString() }
+        ];
+        defaultArtists.forEach(async (art) => {
+          await setDoc(doc(db, 'artists', art.id), art);
+        });
+      } else {
+        setArtistsList(artistsData);
+      }
+    }, (err) => {
+      console.error("Firestore Artists Subscribe Error:", err);
+      handleFirestoreError(err, OperationType.LIST, 'artists');
     });
 
     return () => {
       unsubServices();
       unsubVisits();
       unsubCustomers();
+      unsubArtists();
     };
   }, [isLoggedIn]);
 
@@ -243,6 +278,41 @@ export default function App() {
       await deleteDoc(doc(db, 'staff', id));
     } catch (e) {
       console.error('Failed to remove staff from Firestore:', e);
+    }
+  };
+
+  const handleAddArtist = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (userRole !== 'admin') {
+      alert(lang === 'am' ? 'የአስተዳዳሪ ፈቃድ ያስፈልጋል!' : 'Admin permission is required!');
+      return;
+    }
+    if (!artistName.trim() || !artistSkills.trim()) return;
+    try {
+      const newArtRef = doc(collection(db, 'artists'));
+      await setDoc(newArtRef, {
+        id: newArtRef.id,
+        name: artistName.trim(),
+        skills: artistSkills.trim(),
+        specialty: artistSpecialty,
+        created_at: new Date().toISOString()
+      });
+      setArtistName('');
+      setArtistSkills('');
+    } catch (e) {
+      console.error('Failed to register artist in Firestore:', e);
+    }
+  };
+
+  const handleDeleteArtist = async (id: string) => {
+    if (userRole !== 'admin') {
+      alert(lang === 'am' ? 'የአስተዳaria ፈቃድ ያስፈልጋል!' : 'Admin permission is required!');
+      return;
+    }
+    try {
+      await deleteDoc(doc(db, 'artists', id));
+    } catch (e) {
+      console.error('Failed to remove artist from Firestore:', e);
     }
   };
 
@@ -735,6 +805,8 @@ export default function App() {
                   lang={lang}
                   dict={dict}
                   allVisits={allVisits}
+                  staffList={staffList}
+                  artistsList={artistsList}
                 />
               </div>
             )}
@@ -751,6 +823,8 @@ export default function App() {
               customers={customers}
               allVisits={allVisits}
               salonServices={salonServices}
+              staffList={staffList}
+              artistsList={artistsList}
             />
           </div>
 
@@ -841,6 +915,8 @@ export default function App() {
                       >
                         <option value="cashier">{lang === 'am' ? 'ካሽየር (Cashier)' : 'Cashier'}</option>
                         <option value="assistant">{lang === 'am' ? 'ረዳት (Assistant)' : 'Assistant'}</option>
+                        <option value="hair_artist">{lang === 'am' ? 'የፀጉር ባለሙያ (Hair Artist)' : 'Hair Artist'}</option>
+                        <option value="nail_artist">{lang === 'am' ? 'የጥፍር ባለሙያ (Nail Artist)' : 'Nail Artist'}</option>
                       </select>
                     </div>
                     <div>
@@ -883,7 +959,10 @@ export default function App() {
                       <div>
                         <p className="font-bold text-neutral-850">{member.name}</p>
                         <p className="text-[10px] text-neutral-400 uppercase tracking-widest mt-0.5">
-                          {member.role === 'cashier' ? (lang === 'am' ? 'ካሽየር' : 'Cashier') : (lang === 'am' ? 'ረዳት' : 'Assistant')}
+                          {member.role === 'cashier' ? (lang === 'am' ? 'ካሽየር (Cashier)' : 'Cashier') :
+                           member.role === 'assistant' ? (lang === 'am' ? 'ረዳት (Assistant)' : 'Assistant') :
+                           member.role === 'hair_artist' ? (lang === 'am' ? 'የፀጉር ባለሙያ (Hair Artist)' : 'Hair Artist') :
+                           (lang === 'am' ? 'የጥፍር ባለሙያ (Nail Artist)' : 'Nail Artist')}
                           {userRole === 'admin' && (
                             <span className="ml-2 font-mono lowercase opacity-75">({lang === 'am' ? 'የይለፍ ቃል' : 'password'}: {member.password})</span>
                           )}
@@ -897,6 +976,115 @@ export default function App() {
                             onClick={() => handleDeleteStaff(member.id)}
                             className="p-1 px-3 bg-red-50 hover:bg-red-100 text-red-700 rounded-full text-[10px] font-bold flex items-center gap-1 transition-colors ios-active-scale"
                             title="Delete staff"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            {lang === 'am' ? 'ሰርዝ' : 'Delete'}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+
+            {/* Treatment Artists & Service Providers Section */}
+            <div className="space-y-4 pt-6 border-t border-neutral-100">
+              <h3 className="text-xs font-extrabold uppercase tracking-widest text-[#A89F91] flex items-center gap-1.5 animate-fade-in">
+                <Scissors className="w-4 h-4 text-neutral-400" /> {lang === 'am' ? 'የውበት ባለሙያዎችና ሰራተኞች (Treatment Artists)' : 'Service Providers & Treatment Artists'} ({artistsList.length})
+              </h3>
+
+              {userRole === 'admin' ? (
+                /* Artist Form */
+                <form onSubmit={handleAddArtist} className="bg-white rounded-2xl border border-neutral-150 p-4 space-y-3 shadow-xs animate-fade-in">
+                  <h4 className="text-xs font-bold text-neutral-850">{lang === 'am' ? 'አዲስ የውበት ባለሙያ ጨምር' : 'Register New Treatment Artist / Provider'}</h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 items-end">
+                    <div className="sm:col-span-1">
+                      <label className="block text-[10px] text-neutral-400 font-bold uppercase mb-1">{lang === 'am' ? 'ባለሙያ ሙሉ ስም' : 'Artist Full Name'}</label>
+                      <input
+                        type="text"
+                        required
+                        value={artistName}
+                        onChange={(e) => setArtistName(e.target.value)}
+                        placeholder="e.g. Mahlet Solomon"
+                        className="w-full bg-neutral-50 border border-neutral-200 rounded-lg p-2 text-xs focus:ring-1 focus:ring-neutral-900 focus:outline-none focus:border-neutral-900 font-medium text-neutral-800"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] text-neutral-400 font-bold uppercase mb-1">{lang === 'am' ? 'የሙያ ዘርፍ (Specialty)' : 'Specialty Category'}</label>
+                      <select
+                        value={artistSpecialty}
+                        onChange={(e) => setArtistSpecialty(e.target.value as any)}
+                        className="w-full bg-neutral-50 border border-neutral-200 rounded-lg p-2 text-xs focus:ring-1 focus:ring-neutral-900 focus:outline-none focus:border-neutral-900 font-bold text-neutral-800"
+                      >
+                        <option value="Hair">{lang === 'am' ? 'የፀጉር (Hair)' : 'Hair'}</option>
+                        <option value="Nails">{lang === 'am' ? 'የጥፍር (Nails)' : 'Nails'}</option>
+                        <option value="Skin">{lang === 'am' ? 'የፊት/ቆዳ (Skin)' : 'Skin'}</option>
+                        <option value="Massage">{lang === 'am' ? 'ማሳጅ (Massage)' : 'Massage'}</option>
+                        <option value="General">{lang === 'am' ? 'አጠቃላይ (General)' : 'General'}</option>
+                      </select>
+                    </div>
+                    <div className="sm:col-span-1">
+                      <label className="block text-[10px] text-neutral-400 font-bold uppercase mb-1">{lang === 'am' ? 'ክህሎቶች / ልዩ ችሎታ' : 'Skills & Talents'}</label>
+                      <input
+                        type="text"
+                        required
+                        value={artistSkills}
+                        onChange={(e) => setArtistSkills(e.target.value)}
+                        placeholder="e.g. Balayage, Braiding, Acrylics"
+                        className="w-full bg-neutral-50 border border-neutral-200 rounded-lg p-2 text-xs focus:ring-1 focus:ring-neutral-900 focus:outline-none focus:border-neutral-900 font-medium text-neutral-800"
+                      />
+                    </div>
+                    <button
+                      type="submit"
+                      className="w-full py-2 bg-neutral-900 hover:bg-neutral-800 text-white rounded-lg text-xs font-bold shadow-xs transition-all ios-active-scale"
+                    >
+                      + {lang === 'am' ? 'ባለሙያ አክል' : 'Add Artist'}
+                    </button>
+                  </div>
+                </form>
+              ) : (
+                <div className="bg-amber-50/50 border border-amber-200/50 rounded-2xl p-4 text-xs text-amber-800 font-medium flex items-center gap-2">
+                  <Smartphone className="w-5 h-5 text-amber-600 shrink-0" />
+                  <span>
+                    {lang === 'am' 
+                      ? 'የውበት ባለሙያዎችን መዝገብ ማስተዳደር ለአስተዳዳሪዎች (Admin) ብቻ የተፈቀደ ተግባር ነው።' 
+                      : 'Treatment Artist directory configuration is restricted. Only system Administrators can register or modify active artists.'}
+                  </span>
+                </div>
+              )}
+
+              {/* Artists list table */}
+              <div className="border border-neutral-200 rounded-2xl overflow-hidden divide-y divide-neutral-100 bg-white">
+                {artistsList.length === 0 ? (
+                  <p className="text-xs text-neutral-400 text-center py-6">{lang === 'am' ? 'ምንም የውበት ባለሙያ አልተመዘገበም።' : 'No treatment artists registered yet.'}</p>
+                ) : (
+                  artistsList.map((art) => (
+                    <div key={art.id} className="p-3 px-4 flex items-center justify-between text-xs hover:bg-neutral-50/50">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <p className="font-bold text-neutral-850">{art.name}</p>
+                          <span className="text-[9px] font-bold bg-neutral-100 text-neutral-600 px-2 py-0.5 rounded border border-neutral-200/40">
+                            {lang === 'am' ? (
+                              art.specialty === 'Hair' ? 'የፀጉር (Hair)' :
+                              art.specialty === 'Nails' ? 'የጥፍር (Nails)' :
+                              art.specialty === 'Skin' ? 'የፊት/ቆዳ (Skin)' :
+                              art.specialty === 'Massage' ? 'ማሳጅ (Massage)' : 'አጠቃላይ (General)'
+                            ) : art.specialty}
+                          </span>
+                        </div>
+                        <p className="text-[10px] text-neutral-400 mt-1 font-medium italic">
+                          {lang === 'am' ? 'ልዩ ችሎታዎች: ' : 'Skills: '} {art.skills}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <span className="text-[10px] text-neutral-400 font-mono">{art.created_at ? new Date(art.created_at).toLocaleDateString() : ''}</span>
+                        {userRole === 'admin' && (
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteArtist(art.id)}
+                            className="p-1 px-3 bg-red-50 hover:bg-red-100 text-red-700 rounded-full text-[10px] font-bold flex items-center gap-1 transition-colors ios-active-scale"
+                            title="Delete artist"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                             {lang === 'am' ? 'ሰርዝ' : 'Delete'}
@@ -1106,6 +1294,8 @@ export default function App() {
             dict={dict}
             salonServices={salonServices}
             allVisits={allVisits}
+            staffList={staffList}
+            artistsList={artistsList}
           />
         </>
       )}

@@ -8,7 +8,7 @@ import { CustomerWithRetention, Language } from '../types';
 import { Dict } from '../translations';
 import { PlusCircle, AlertCircle, Sparkles, X } from 'lucide-react';
 import { collection, doc, setDoc } from 'firebase/firestore';
-import { db } from '../lib/firebase';
+import { db, OperationType, handleFirestoreError } from '../lib/firebase';
 import { classifyCustomer } from '../lib/retention';
 import { convertToGregorian, ETHIOPIAN_MONTHS_EN, ETHIOPIAN_MONTHS_AM } from '../lib/ethiopianCalendar';
 
@@ -128,6 +128,7 @@ export default function RegistrationForm({ existingCustomers, onRegisterSuccess,
       }, 1000);
     } catch (err: any) {
       setErrorMsg(err.message || (lang === 'am' ? 'የግንኙነት ችግር አጋጥሟል።' : 'System connectivity issue.'));
+      handleFirestoreError(err, OperationType.WRITE, 'customers');
     } finally {
       setIsSubmitting(false);
     }
