@@ -133,12 +133,47 @@ export default function CheckInModal({
         price_charged: Number(priceCharged),
         payment_method: paymentChannel,
         visit_date: visitDate,
-        assigned_staff_id: selectedArtistIds.join(',') || undefined,
-        equipment_used: equipmentUsed.trim() || undefined
       };
+
+      if (selectedArtistIds && selectedArtistIds.length > 0) {
+        newVisit.assigned_staff_id = selectedArtistIds.join(',');
+      }
+      if (equipmentUsed && equipmentUsed.trim()) {
+        newVisit.equipment_used = equipmentUsed.trim();
+      }
 
       await setDoc(newVisitRef, newVisit);
       setIsSuccess(true);
+
+      // Send Real-time Visit Completed / Payment Received SMS via backend GeezSMS proxy
+      if (selectedClient) {
+        try {
+          // Resolve services used to service names
+          const matchedNames = selectedServices.map(itemId => {
+            const found = (salonServices || []).find(s => s.id === itemId);
+            return found ? translateServiceName(found.id, found.name, lang) : itemId;
+          });
+          const serviceNamesText = matchedNames.join(', ');
+
+          const thanksMsg = lang === 'am'
+            ? `ውድ ${selectedClient.full_name}፣ ስለመጡልን እናመሰግናለን! ለወሰዱት አገልግሎት (${serviceNamesText}) በ${paymentChannel === 'Cash' ? 'በጥሬ ገንዘብ' : paymentChannel} ${Number(priceCharged)} ብር ከፍለዋል። በድጋሚ እንዲጎበኙን እንጠብቃለን!`
+            : `Dear ${selectedClient.full_name}, thank you for visiting Konjo Salon! You have successfully paid ${Number(priceCharged)} Birr via ${paymentChannel} for services: ${serviceNamesText}. We look forward to seeing you again!`;
+
+          await fetch('/api/sms/send', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              phone: selectedClient.phone_number,
+              message: thanksMsg
+            })
+          });
+          console.log('[GeezSMS] Visit thank you SMS triggered successfully');
+        } catch (smsErr) {
+          console.error('[GeezSMS] Bypassed or failed visit thank you SMS dispatch:', smsErr);
+        }
+      }
       
       // Calculate updated customer state on the fly of the newly added visit
       setTimeout(() => {

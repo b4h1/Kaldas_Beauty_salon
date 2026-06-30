@@ -54,6 +54,28 @@ export default function BirthdayWishModal({ customer, lang, onClose, onSent }: B
 
     setIsSending(true);
     try {
+      // Send real SMS via backend GeezSMS gateway
+      try {
+        const smsRes = await fetch('/api/sms/send', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            phone: customer.phone_number,
+            message: message.trim()
+          })
+        });
+        
+        if (!smsRes.ok) {
+          const errData = await smsRes.json().catch(() => ({}));
+          throw new Error(errData.error || `HTTP ${smsRes.status}`);
+        }
+      } catch (smsErr: any) {
+        console.error('Failed to dispatch real SMS via gateway:', smsErr);
+        throw smsErr;
+      }
+
       const wishId = `wish_${Date.now()}`;
       const wishRef = doc(collection(db, 'birthday_wishes'), wishId);
       
@@ -68,7 +90,7 @@ export default function BirthdayWishModal({ customer, lang, onClose, onSent }: B
         offer_type: offerType,
         sent_at: new Date().toISOString(),
         sent_by: adminName,
-        status: 'sent_mock'
+        status: 'sent_live'
       });
 
       setSuccess(true);
@@ -76,9 +98,11 @@ export default function BirthdayWishModal({ customer, lang, onClose, onSent }: B
       setTimeout(() => {
         onClose();
       }, 2200);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error saving birthday wish: ', err);
-      alert(lang === 'am' ? 'መልዕክት ለመላክ አልተቻለም!' : 'Failed to send/log birthday wish!');
+      alert(lang === 'am' 
+        ? `መልዕክት ለመላክ አልተቻለም! ስህተት: ${err.message || err}` 
+        : `Failed to send/log birthday wish! Error: ${err.message || err}`);
     } finally {
       setIsSending(false);
     }
@@ -222,8 +246,8 @@ export default function BirthdayWishModal({ customer, lang, onClose, onSent }: B
               </button>
             </div>
             
-            <p className="text-[9px] text-[#A89F91] text-center font-bold uppercase tracking-wider mt-1.5 italic">
-              ℹ️ {lang === 'am' ? 'የኤስኤምኤስ ጌትዌይ ሲጨመር መልዕክቱ በቀጥታ ለደንበኛው ይላካል። እስከዚያው በሲስተሙ ይመዘገባል።' : 'Drafted message will be logged in CRM. Will dispatch live once you integrate your SMS Gateway API.'}
+            <p className="text-[9px] text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-xl p-2 text-center font-bold uppercase tracking-wider mt-1.5 italic">
+              ℹ️ {lang === 'am' ? 'የኤስኤምኤስ ጌትዌይ (GeezSMS) ገብቷል! መልዕክቱ በቀጥታ ይላካል።' : 'GeezSMS Gateway active! Birthday wishes are delivered instantly to clients.'}
             </p>
 
           </form>
@@ -239,8 +263,8 @@ export default function BirthdayWishModal({ customer, lang, onClose, onSent }: B
               </h4>
               <p className="text-xs text-neutral-400 font-medium leading-relaxed max-w-xs mx-auto">
                 {lang === 'am' 
-                  ? 'የልደት ምኞቱ እና የተመረጠው ስጦታ በሲስተሙ ተመዝግቧል። ኤስኤምኤስ ወደ ' 
-                  : 'The birthday wish and selected reward offer have been securely saved to the database. Mock SMS dispatched to '}
+                  ? 'የልደት ምኞቱ እና የተመረጠው ስጦታ በሲስተሙ ተመዝግቧል። ኤስኤምኤስ በቀጥታ ተልኳል ወደ ' 
+                  : 'The birthday wish and selected reward offer have been securely saved. Live SMS dispatched to '}
                 <span className="font-mono font-bold text-neutral-800">{customer.phone_number}</span>.
               </p>
             </div>

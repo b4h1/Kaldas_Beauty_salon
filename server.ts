@@ -64,6 +64,54 @@ function classifyCustomer(customer: any, usrVisits: any[], curTime = new Date())
   };
 }
 
+// --- GEEZ SMS INTEGRATION ---
+async function sendGeezSMS(phoneNumber: string, messageText: string) {
+  // Clean token of potential quotes or whitespace
+  const rawToken = process.env.GEEZ_SMS_TOKEN || 'm3tCICfmNSGx1OweNguDXAhwChkF6m4Q';
+  const token = rawToken.trim().replace(/^["']|["']$/g, '');
+  
+  // Normalize Ethiopian phone number format
+  let cleaned = phoneNumber.trim().replace(/[\s\-\(\)\+]/g, '');
+  if (cleaned.startsWith('2510')) {
+    cleaned = '251' + cleaned.substring(4);
+  } else if (cleaned.startsWith('0')) {
+    cleaned = '251' + cleaned.substring(1);
+  } else if ((cleaned.startsWith('9') || cleaned.startsWith('7')) && cleaned.length === 9) {
+    cleaned = '251' + cleaned;
+  }
+  
+  console.log(`[GeezSMS] Attempting to send SMS to: ${cleaned} using token prefix: ${token.substring(0, 4)}...`);
+  try {
+    const url = 'https://api.geezsms.com/api/v1/sms/send';
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        token: token,
+        phone: cleaned,
+        msg: messageText
+      })
+    });
+    
+    let data;
+    const contentType = response.headers.get('content-type') || '';
+    if (contentType.includes('application/json')) {
+      data = await response.json();
+    } else {
+      const text = await response.text();
+      data = { error: true, msg: text || `HTTP Error ${response.status}` };
+    }
+    
+    console.log(`[GeezSMS] API Response for ${cleaned}:`, data);
+    return data;
+  } catch (error) {
+    console.error(`[GeezSMS] API Network Error sending to ${cleaned}:`, error);
+    return { error: true, msg: String(error) };
+  }
+}
+
 // --- DATABASE AUTO-SEEDER ---
 async function ensureSeeded() {
   try {
@@ -395,6 +443,12 @@ app.post('/api/customers', async (req, res) => {
 
     await db.insert(customers).values(newCustomer);
 
+    // Send Welcoming SMS using GeezSMS
+    const welcomeMsg = `ውድ ${full_name.trim()}፣ ኮንጆ ሳሎን (Konjo Salon) ስለተመዘገቡ እናመሰግናለን! Welcome to Konjo Salon CRM. We are thrilled to have you!`;
+    sendGeezSMS(trimmedPhone, welcomeMsg).catch(err => {
+      console.error('[GeezSMS] Welcome message sending failed:', err);
+    });
+
     const allVisits = await db.select().from(visits);
     const withStatus = classifyCustomer(newCustomer, allVisits, new Date());
     res.status(201).json(withStatus);
@@ -430,6 +484,26 @@ app.post('/api/visits', async (req, res) => {
     };
 
     await db.insert(visits).values(newVisit);
+
+    // Build list of service names for thank you SMS
+    let serviceNamesText = '';
+    try {
+      const availableServices = await db.select().from(services);
+      const matchedNames = items_used.map(itemId => {
+        const found = availableServices.find(s => s.id === itemId);
+        return found ? found.name : itemId;
+      });
+      serviceNamesText = matchedNames.join(', ');
+    } catch (e) {
+      console.error('[GeezSMS] Service names lookup failed:', e);
+      serviceNamesText = items_used.join(', ');
+    }
+
+    // Send Thank You SMS with amount and services used
+    const thanksMsg = `ውድ ${clients[0].full_name}፣ ስለመጡልን እናመሰግናለን! Thank you for visiting Konjo Salon. You paid ${Number(price_charged)} Birr via ${payment_method} for services: ${serviceNamesText}. We hope to see you again soon!`;
+    sendGeezSMS(clients[0].phone_number, thanksMsg).catch(err => {
+      console.error('[GeezSMS] Visit payment thank you message sending failed:', err);
+    });
 
     // Fetch updated customer and classify
     const allVisits = await db.select().from(visits);
@@ -622,6 +696,26 @@ app.get('/api/export', async (req, res) => {
   } catch (err) {
     console.error('Error in GET /api/export:', err);
     res.status(500).send('Database query failed. Please try again later.');
+  }
+});
+
+// --- SMS DISPATCH GATEWAY ---
+app.post('/api/sms/send', async (req, res) => {
+  try {
+    const { phone, message } = req.body;
+    if (!phone || !message) {
+      res.status(400).json({ error: 'Phone and message are required' });
+      return;
+    }
+    const result = await sendGeezSMS(phone, message);
+    if (result && (result.error === true || result.error === 'true')) {
+      res.status(400).json({ error: result.msg || 'GeezSMS API rejected the request' });
+      return;
+    }
+    res.json({ success: true, result });
+  } catch (err) {
+    console.error('Error in POST /api/sms/send:', err);
+    res.status(500).json({ error: 'Failed to dispatch SMS' });
   }
 });
 

@@ -41,7 +41,10 @@ import {
   Gift,
   ChevronDown,
   ChevronUp,
-  Scissors
+  Scissors,
+  X,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 
 export default function App() {
@@ -86,6 +89,7 @@ export default function App() {
   });
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [loginError, setLoginError] = useState('');
 
   // Staff registry state
@@ -469,14 +473,24 @@ export default function App() {
 
             <div className="space-y-1">
               <label className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider block">{lang === 'am' ? 'የይለፍ ቃል' : 'Password'}</label>
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                className="w-full bg-neutral-50/90 border border-neutral-200 rounded-xl p-3 text-xs focus:ring-1 focus:ring-neutral-900 focus:outline-none focus:border-neutral-900 font-medium text-neutral-800 placeholder:text-neutral-355"
-                placeholder="••••••••"
-              />
+              <div className="relative">
+                <input
+                  type={showPassword ? "text" : "password"}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  className="w-full bg-neutral-50/90 border border-neutral-200 rounded-xl p-3 pr-10 text-xs focus:ring-1 focus:ring-neutral-900 focus:outline-none focus:border-neutral-900 font-medium text-neutral-800 placeholder:text-neutral-355"
+                  placeholder="••••••••"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3.5 top-3.5 text-neutral-400 hover:text-neutral-700 transition-colors flex items-center justify-center"
+                  title={showPassword ? (lang === 'am' ? 'የይለፍ ቃል ደብቅ' : 'Hide password') : (lang === 'am' ? 'የይለፍ ቃል አሳይ' : 'Show password')}
+                >
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
             </div>
 
             {loginError && (
@@ -709,9 +723,19 @@ export default function App() {
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
                       placeholder={dict.search_placeholder}
-                      className="w-full pl-10 pr-4 py-2.5 text-xs bg-neutral-50 border border-neutral-200/60 rounded-full focus:outline-none focus:border-neutral-900 focus:ring-1 focus:ring-neutral-900 transition-all font-medium text-neutral-800 placeholder:text-neutral-400"
+                      className="w-full pl-10 pr-10 py-2.5 text-xs bg-neutral-50 border border-neutral-200/60 rounded-full focus:outline-none focus:border-neutral-900 focus:ring-1 focus:ring-neutral-900 transition-all font-medium text-neutral-800 placeholder:text-neutral-400"
                       id="directory-search-field"
                     />
+                    {searchQuery && (
+                      <button
+                        onClick={() => setSearchQuery('')}
+                        className="absolute right-4 top-3 p-0.5 text-neutral-400 hover:text-neutral-900 bg-neutral-100 hover:bg-neutral-200 rounded-full transition-colors flex items-center justify-center ios-active-scale"
+                        title={lang === 'am' ? 'ይቅር' : 'Clear search'}
+                        id="btn-clear-client-search"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    )}
                   </div>
 
                   <div className="relative min-w-[160px]">

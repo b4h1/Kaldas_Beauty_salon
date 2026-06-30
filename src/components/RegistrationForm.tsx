@@ -100,6 +100,27 @@ export default function RegistrationForm({ existingCustomers, onRegisterSuccess,
       };
 
       await setDoc(newCustRef, rawCustomer);
+
+      // Send Welcoming SMS via backend GeezSMS proxy
+      try {
+        const welcomeMsg = lang === 'am'
+          ? `ውድ ${fullName.trim()}፣ ኮንጆ ሳሎን (Konjo Salon) ስለተመዘገቡ እናመሰግናለን! ቴክኖሎጂውን በመጠቀም የተሻለ አገልግሎት ለማቅረብ እንተጋለን።`
+          : `Dear ${fullName.trim()}, thank you for registering with Konjo Salon! We are thrilled to have you as our valued client.`;
+
+        await fetch('/api/sms/send', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            phone: phoneNumber.trim(),
+            message: welcomeMsg
+          })
+        });
+        console.log('[GeezSMS] Welcome SMS triggered successfully');
+      } catch (smsErr) {
+        console.error('[GeezSMS] Bypassed or failed welcome SMS dispatch:', smsErr);
+      }
       
       const classified = classifyCustomer(
         {

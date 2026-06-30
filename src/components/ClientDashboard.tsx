@@ -6,8 +6,8 @@
 import React, { useState, useEffect } from 'react';
 import { CustomerWithRetention, Visit, PREDEFINED_SERVICES, Language, TreatmentArtist } from '../types';
 import { Dict, translateName, translateServiceName } from '../translations';
-import { Phone, Calendar, ClipboardList, PenTool, Check, Notebook, Clock, FileSpreadsheet, Plus, Edit2, Save, X as CloseIcon } from 'lucide-react';
-import { doc, updateDoc } from 'firebase/firestore';
+import { Phone, Calendar, ClipboardList, PenTool, Check, Notebook, Clock, FileSpreadsheet, Plus, Edit2, Save, Trash2, X as CloseIcon } from 'lucide-react';
+import { doc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { db, OperationType, handleFirestoreError } from '../lib/firebase';
 import BirthdayWishModal from './BirthdayWishModal';
 
@@ -35,6 +35,7 @@ export default function ClientDashboard({ customer, onLogVisitForCustomer, onRef
   const [editBirthday, setEditBirthday] = useState('');
   const [profileError, setProfileError] = useState('');
   const [isSavingProfile, setIsSavingProfile] = useState(false);
+  const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
 
   // Derive dynamic client's visit chronology from our synchronized real-time props!
   const history = React.useMemo(() => {
@@ -55,6 +56,7 @@ export default function ClientDashboard({ customer, onLogVisitForCustomer, onRef
       setIsEditingProfile(false);
       setIsEditingNotes(false);
       setNotesFeedback(false);
+      setIsConfirmingDelete(false);
     }
   }, [customer]);
 
@@ -96,6 +98,25 @@ export default function ClientDashboard({ customer, onLogVisitForCustomer, onRef
       handleFirestoreError(e, OperationType.UPDATE, 'customers');
     } finally {
       setIsSavingProfile(false);
+    }
+  };
+
+  const handleDeleteCustomer = async () => {
+    if (!customer) return;
+    try {
+      // 1. Delete all visits of this customer to prevent orphaned entries in database
+      for (const visit of history) {
+        await deleteDoc(doc(db, 'visits', visit.id));
+      }
+      // 2. Delete customer document itself
+      await deleteDoc(doc(db, 'customers', customer.id));
+      
+      setIsConfirmingDelete(false);
+      onRefreshTrigger();
+    } catch (e) {
+      console.error('Failed to delete customer:', e);
+      setProfileError(lang === 'am' ? 'የደንበኛ መረጃን መሰረዝ አልተቻለም' : 'Failed to delete customer profile');
+      handleFirestoreError(e, OperationType.DELETE, 'customers');
     }
   };
 
@@ -174,16 +195,26 @@ export default function ClientDashboard({ customer, onLogVisitForCustomer, onRef
                   <h2 className="text-lg font-bold font-sans text-neutral-900 tracking-tight">{customer.full_name}</h2>
                 )}
 
-                {/* Edit Toggle Icon */}
+                {/* Edit & Delete Toggle Icons */}
                 {!isEditingProfile ? (
-                  <button
-                    onClick={() => setIsEditingProfile(true)}
-                    className="p-1.5 text-neutral-400 hover:text-neutral-900 transition-colors bg-white rounded-full border border-neutral-200/50 shadow-xs hover:shadow-xs ios-active-scale"
-                    title={lang === 'am' ? 'መገለጫ አርትዕ' : 'Edit Profile'}
-                    id="btn-trigger-edit-profile"
-                  >
-                    <Edit2 className="w-3.5 h-3.5" />
-                  </button>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      onClick={() => setIsEditingProfile(true)}
+                      className="p-1.5 text-neutral-400 hover:text-neutral-900 transition-colors bg-white rounded-full border border-neutral-200/50 shadow-xs hover:shadow-xs ios-active-scale"
+                      title={lang === 'am' ? 'መገለጫ አርትዕ' : 'Edit Profile'}
+                      id="btn-trigger-edit-profile"
+                    >
+                      <Edit2 className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      onClick={() => setIsConfirmingDelete(true)}
+                      className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 transition-colors bg-white rounded-full border border-neutral-200/50 shadow-xs hover:shadow-xs ios-active-scale"
+                      title={lang === 'am' ? 'ደንበኛ ሰርዝ' : 'Delete Customer'}
+                      id="btn-trigger-delete-profile"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 ) : (
                   <div className="flex items-center gap-1.5 ml-1">
                     <button
@@ -230,6 +261,39 @@ export default function ClientDashboard({ customer, onLogVisitForCustomer, onRef
           </div>
 
         </div>
+        
+        {/* Delete Confirmation Banner */}
+        {isConfirmingDelete && (
+          <div className="mt-4 p-4 bg-red-50 rounded-2xl border border-red-200/60 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 animate-fade-in" id="delete-confirmation-banner">
+            <div className="flex items-center gap-2">
+              <span className="text-red-600 text-lg">⚠️</span>
+              <div>
+                <h4 className="text-xs font-bold text-red-900">
+                  {lang === 'am' ? 'እርግጠኛ ነዎት ይህንን ደንበኛ መሰረዝ ይፈልጋሉ?' : 'Are you sure you want to delete this client?'}
+                </h4>
+                <p className="text-[10px] text-red-700">
+                  {lang === 'am' ? 'ይህ ድርጊት ደንበኛውን እና ሁሉንም የጉብኝት ታሪክ በቋሚነት ያጠፋል።' : 'This action permanently deletes the client and all visit history.'}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                onClick={handleDeleteCustomer}
+                className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-full text-[11px] font-bold transition-all ios-active-scale shadow-xs"
+                id="btn-confirm-delete-customer"
+              >
+                {lang === 'am' ? 'አዎ፥ ሰርዝ' : 'Yes, Delete'}
+              </button>
+              <button
+                onClick={() => setIsConfirmingDelete(false)}
+                className="px-3 py-1.5 bg-white border border-neutral-200 hover:bg-neutral-50 text-neutral-700 rounded-full text-[11px] font-bold transition-all ios-active-scale"
+                id="btn-cancel-delete-customer"
+              >
+                {lang === 'am' ? 'ተው' : 'Cancel'}
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Info Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-6 pt-6 border-t border-neutral-200/40">
