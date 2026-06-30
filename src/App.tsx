@@ -116,13 +116,13 @@ export default function App() {
     const cleanUser = username.trim().toLowerCase();
     const cleanPass = password.trim();
 
-    if (cleanUser === 'admin' && cleanPass === 'admin123') {
+    if (cleanUser === 'admin1' && (cleanPass === 'Admin1' || cleanPass === 'admin1')) {
       setIsLoggedIn(true);
       setUserRole('admin');
-      setLoggedInUser('admin');
+      setLoggedInUser('Admin1');
       localStorage.setItem('kaldas_logged_in', 'true');
       localStorage.setItem('kaldas_user_role', 'admin');
-      localStorage.setItem('kaldas_logged_user', 'admin');
+      localStorage.setItem('kaldas_logged_user', 'Admin1');
       setLoginError('');
       return;
     }
@@ -445,7 +445,7 @@ export default function App() {
                 onChange={(e) => setUsername(e.target.value)}
                 required
                 className="w-full bg-neutral-50/90 border border-neutral-200 rounded-xl p-3 text-xs focus:ring-1 focus:ring-neutral-900 focus:outline-none focus:border-neutral-900 font-medium text-neutral-800 placeholder:text-neutral-350"
-                placeholder="e.g. admin"
+                placeholder="e.g. Admin1"
               />
             </div>
 
