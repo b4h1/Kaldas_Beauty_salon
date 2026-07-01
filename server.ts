@@ -136,7 +136,11 @@ async function sendGeezSMS(phoneNumber: string, messageText: string) {
     
     let data: any = {};
     const text = (await response.text()).trim();
-    console.log(`[GeezSMS] Raw response text for ${formattedPhone}:`, text);
+    if (text.includes('"error":true') || text.includes('"error": true') || text.includes('error:true')) {
+      console.warn(`[GeezSMS] API returned failure response for ${formattedPhone}:`, text);
+    } else {
+      console.log(`[GeezSMS] API response indicates dispatch success for ${formattedPhone}`);
+    }
     
     try {
       const parsed = JSON.parse(text);
@@ -156,7 +160,11 @@ async function sendGeezSMS(phoneNumber: string, messageText: string) {
       }
     }
     
-    console.log(`[GeezSMS] Parsed Response for ${formattedPhone}:`, data);
+    if (data.error) {
+      console.error(`[GeezSMS] Failed response for ${formattedPhone}:`, data.msg);
+    } else {
+      console.log(`[GeezSMS] Success response for ${formattedPhone}:`, data.msg);
+    }
     
     // Log the message status in local cache
     if (data.error) {
