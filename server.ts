@@ -161,6 +161,9 @@ async function sendGeezSMS(phoneNumber: string, messageText: string) {
     }
     
     if (data.error) {
+      if (data.msg && typeof data.msg === 'string' && data.msg.toLowerCase().includes('safaricom') && data.msg.toLowerCase().includes('sender')) {
+        data.msg = `${data.msg} (Action Required: Safaricom Ethiopia requires manual Sender Name approval. Please contact GeezSMS Support to whitelist your brand name/Sender ID on Safaricom.)`;
+      }
       console.error(`[GeezSMS] Failed response for ${formattedPhone}:`, data.msg);
     } else {
       console.log(`[GeezSMS] Success response for ${formattedPhone}:`, data.msg);
@@ -568,8 +571,8 @@ app.post('/api/visits', async (req, res) => {
       serviceNamesText = items_used.join(', ');
     }
 
-    // Send Thank You SMS with amount and services used
-    const thanksMsg = `ውድ ${clients[0].full_name}፣ ስለመጡልን እናመሰግናለን! Thank you for visiting Kaldas Beauty Salon. You paid ${Number(price_charged)} Birr via ${payment_method} for services: ${serviceNamesText}. We hope to see you again soon!`;
+    // Send Thank You SMS with amount
+    const thanksMsg = `ውድ ${clients[0].full_name}፣ ስለመጡልን እናመሰግናለን! Thank you for visiting Kaldas Beauty Salon. You paid a total of ${Number(price_charged)} Birr.`;
     sendGeezSMS(clients[0].phone_number, thanksMsg).catch(err => {
       console.error('[GeezSMS] Visit payment thank you message sending failed:', err);
     });

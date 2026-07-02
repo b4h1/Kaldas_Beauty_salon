@@ -390,6 +390,15 @@ export default function CustomBroadcaster({ customers, lang, dict, onRefreshLogs
             </div>
           )}
 
+          {sendingResults.some(r => r.status === 'failed' && r.error && r.error.toLowerCase().includes('safaricom')) && (
+            <div className="p-2.5 rounded-lg bg-amber-50 text-[10px] text-amber-850 leading-normal border border-amber-200/50">
+              💡 <strong>{lang === 'am' ? 'የሳፋሪኮም ማሳሰቢያ' : 'Safaricom Notice'}:</strong>{' '}
+              {lang === 'am'
+                ? 'ለሳፋሪኮም ስልኮች ለመላክ የላኪ ስም (Sender Name) በሳፋሪኮም መጽደቅ አለበት። እባክዎ GeezSMSን ያነጋግሩ።'
+                : 'To send messages to Safaricom numbers, your Sender Name must be whitelisted on Safaricom. Please contact GeezSMS support.'}
+            </div>
+          )}
+
           {/* Scrollable list of results */}
           {sendingResults.length > 0 && (
             <div className="max-h-32 overflow-y-auto divide-y divide-neutral-100 text-[10px] border border-neutral-150 rounded-lg">

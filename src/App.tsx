@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { CustomerWithRetention, Language, Visit, PREDEFINED_SERVICES } from './types';
+import { CustomerWithRetention, Language, Visit, PREDEFINED_SERVICES, SmsTemplates, DEFAULT_SMS_TEMPLATES } from './types';
 import { TRANSLATIONS, translateName, translateServiceName, translateCategory, translateSkills } from './translations';
 import RegistrationForm from './components/RegistrationForm';
 import CheckInModal from './components/CheckInModal';
@@ -79,6 +79,22 @@ export default function App() {
   
   const [smsEnabled, setSmsEnabled] = useState(true);
   const [isSmsSaving, setIsSmsSaving] = useState(false);
+  const [smsTemplates, setSmsTemplates] = useState<SmsTemplates>(DEFAULT_SMS_TEMPLATES);
+  const [isTemplatesSaving, setIsTemplatesSaving] = useState(false);
+
+  const [tempWelcomeAm, setTempWelcomeAm] = useState('');
+  const [tempWelcomeEn, setTempWelcomeEn] = useState('');
+  const [tempBillingAm, setTempBillingAm] = useState('');
+  const [tempBillingEn, setTempBillingEn] = useState('');
+
+  useEffect(() => {
+    if (smsTemplates) {
+      setTempWelcomeAm(smsTemplates.welcome_am || DEFAULT_SMS_TEMPLATES.welcome_am);
+      setTempWelcomeEn(smsTemplates.welcome_en || DEFAULT_SMS_TEMPLATES.welcome_en);
+      setTempBillingAm(smsTemplates.billing_am || DEFAULT_SMS_TEMPLATES.billing_am);
+      setTempBillingEn(smsTemplates.billing_en || DEFAULT_SMS_TEMPLATES.billing_en);
+    }
+  }, [smsTemplates]);
   
   const [showRegPanel, setShowRegPanel] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -345,6 +361,24 @@ export default function App() {
       }
     });
 
+    // 6b. Subscribe to SMS Custom Templates in Firestore
+    const unsubSmsTemplates = onSnapshot(doc(db, 'settings', 'sms_templates'), (docSnap) => {
+      if (!isSubscribed) return;
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        setSmsTemplates({
+          welcome_am: data.welcome_am || DEFAULT_SMS_TEMPLATES.welcome_am,
+          welcome_en: data.welcome_en || DEFAULT_SMS_TEMPLATES.welcome_en,
+          billing_am: data.billing_am || DEFAULT_SMS_TEMPLATES.billing_am,
+          billing_en: data.billing_en || DEFAULT_SMS_TEMPLATES.billing_en,
+        });
+      } else {
+        setSmsTemplates(DEFAULT_SMS_TEMPLATES);
+      }
+    }, (err) => {
+      console.warn("Firestore SMS Templates subscription bypassed:", err);
+    });
+
     return () => {
       isSubscribed = false;
       unsubServices();
@@ -354,11 +388,32 @@ export default function App() {
       unsubWishes();
       unsubSmsLogs();
       unsubSmsConfig();
+      unsubSmsTemplates();
       if (fallbackInterval) {
         clearInterval(fallbackInterval);
       }
     };
   }, [isLoggedIn]);
+
+  const handleSaveTemplates = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsTemplatesSaving(true);
+    try {
+      await setDoc(doc(db, 'settings', 'sms_templates'), {
+        welcome_am: tempWelcomeAm.trim(),
+        welcome_en: tempWelcomeEn.trim(),
+        billing_am: tempBillingAm.trim(),
+        billing_en: tempBillingEn.trim(),
+      });
+      setUiFeedback(lang === 'am' ? 'የኤስኤምኤስ ቴምፕሌቶች በተሳካ ሁኔታ ተቀምጠዋል!' : 'SMS templates saved successfully!');
+      setTimeout(() => setUiFeedback(null), 3000);
+    } catch (err: any) {
+      console.error("Error saving templates to Firestore:", err);
+      alert(lang === 'am' ? 'ቴምፕሌቶችን ማስቀመጥ አልተቻለም።' : 'Failed to save templates.');
+    } finally {
+      setIsTemplatesSaving(false);
+    }
+  };
 
   const handleAddStaff = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1087,6 +1142,22 @@ export default function App() {
                 )}
               </div>
             </div>
+            
+            {smsLogs.some(l => l.status === 'Failed' && l.error_message && l.error_message.toLowerCase().includes('safaricom')) && (
+              <div className="p-4 rounded-2xl bg-amber-50/70 border border-amber-200/60 text-amber-900 text-xs leading-relaxed space-y-1.5 shadow-sm" id="safaricom-regulatory-banner">
+                <div className="flex items-center gap-2 font-bold text-amber-800">
+                  <span className="text-sm">⚠️</span>
+                  <span>
+                    {lang === 'am' ? 'የሳፋሪኮም ኤስኤምኤስ መላኪያ ማሳሰቢያ' : 'Safaricom SMS Regulatory Action Required'}
+                  </span>
+                </div>
+                <p className="font-medium text-[11px]">
+                  {lang === 'am' 
+                    ? 'አንዳንድ የሳፋሪኮም ስልኮች ላይ መልዕክት መላክ አልተቻለም። ምክንያቱም የሳፋሪኮም ኔትወርክ (Safaricom Ethiopia) የላኪ ስም ፈቃድ (Sender ID Whitelisting) ስለሚጠይቅ ነው። እባክዎ ይህንን ለመፍታት የ GeezSMS ደንበኞች ድጋፍን ያነጋግሩ።' 
+                    : 'Some messages to Safaricom numbers (+2517... / 07...) failed because Safaricom Ethiopia requires manual whitelisting of your Sender Name/ID. To resolve this, please contact GeezSMS support or submit your Sender ID for Safaricom whitelisting through your GeezSMS account dashboard.'}
+                </p>
+              </div>
+            )}
 
             {/* Quick status summary widget row */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4" id="sms-summary-widgets">
@@ -1174,6 +1245,121 @@ export default function App() {
                 </div>
               )}
             </div>
+
+            {/* Custom SMS Templates Customizer (Admin Only) */}
+            {userRole === 'admin' && (
+              <div className="bg-[#FAF9F6] rounded-2xl border border-neutral-200/50 p-6 space-y-5 shadow-inner">
+                <div className="flex items-center justify-between border-b border-neutral-200/60 pb-3">
+                  <div>
+                    <h3 className="text-sm font-bold text-neutral-900 flex items-center gap-2">
+                      <Sparkles className="w-4 h-4 text-neutral-500 animate-pulse" />
+                      {lang === 'am' ? 'የኤስኤምኤስ መልዕክት ቴምፕሌቶች ማስተካከያ' : 'SMS Message Templates Customization'}
+                    </h3>
+                    <p className="text-[11px] text-[#A89F91] mt-1 font-medium">
+                      {lang === 'am' 
+                        ? 'ለደንበኛ ምዝገባ እና ክፍያ የሚላኩ መልዕክቶችን በራስዎ ምርጫ ያብጁ።' 
+                        : 'Customize automatic welcome and post-payment thank-you billing notifications.'}
+                    </p>
+                  </div>
+                  <span className="text-[10px] uppercase font-black bg-neutral-900 text-white px-2.5 py-1 rounded-full tracking-wider font-mono">
+                    {lang === 'am' ? 'ባለሙያ መቆጣጠሪያ' : 'Admin Area'}
+                  </span>
+                </div>
+
+                <form onSubmit={handleSaveTemplates} className="space-y-6">
+                  {/* welcome section */}
+                  <div className="space-y-4">
+                    <h4 className="text-xs font-extrabold uppercase tracking-widest text-[#A89F91] flex items-center gap-1.5">
+                      <span>🎉</span> {lang === 'am' ? 'አዲስ ደንበኛ ሲመዘገብ (Welcome Registration SMS)' : 'New Customer Registration (Welcome SMS)'}
+                    </h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-1.5">
+                        <label className="block text-xs font-bold text-neutral-700">
+                          {lang === 'am' ? 'የአማርኛ መልዕክት' : 'Amharic Version'}
+                        </label>
+                        <textarea
+                          rows={3}
+                          value={tempWelcomeAm}
+                          onChange={(e) => setTempWelcomeAm(e.target.value)}
+                          className="w-full px-3.5 py-2.5 text-xs bg-white border border-neutral-200 rounded-xl focus:outline-none focus:border-neutral-900 focus:ring-1 focus:ring-neutral-900 text-neutral-800 placeholder:text-neutral-300 font-medium leading-relaxed"
+                          placeholder={DEFAULT_SMS_TEMPLATES.welcome_am}
+                          id="sms-welcome-am-field"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="block text-xs font-bold text-neutral-700">
+                          {lang === 'am' ? 'የእንግሊዘኛ መልዕክት' : 'English Version'}
+                        </label>
+                        <textarea
+                          rows={3}
+                          value={tempWelcomeEn}
+                          onChange={(e) => setTempWelcomeEn(e.target.value)}
+                          className="w-full px-3.5 py-2.5 text-xs bg-white border border-neutral-200 rounded-xl focus:outline-none focus:border-neutral-900 focus:ring-1 focus:ring-neutral-900 text-neutral-800 placeholder:text-neutral-300 font-medium leading-relaxed"
+                          placeholder={DEFAULT_SMS_TEMPLATES.welcome_en}
+                          id="sms-welcome-en-field"
+                        />
+                      </div>
+                    </div>
+                    <p className="text-[10px] text-[#A89F91] leading-relaxed italic">
+                      💡 <strong>{lang === 'am' ? 'መለያዎች፡' : 'Supported Placeholders:'}</strong> <code>{'{name}'}</code> {lang === 'am' ? 'በደንበኛው ሙሉ ስም በራስ-ሰር ይተካል።' : 'will be replaced automatically with the customer\'s full name.'}
+                    </p>
+                  </div>
+
+                  {/* billing section */}
+                  <div className="space-y-4 pt-4 border-t border-neutral-200/50">
+                    <h4 className="text-xs font-extrabold uppercase tracking-widest text-[#A89F91] flex items-center gap-1.5">
+                      <span>💳</span> {lang === 'am' ? 'ክፍያ ሲጠናቀቅ የሚላክ (Post-Visit Billing Thank You SMS)' : 'Checkout Payment Completed (Billing SMS)'}
+                    </h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-1.5">
+                        <label className="block text-xs font-bold text-neutral-700">
+                          {lang === 'am' ? 'የአማርኛ መልዕክት' : 'Amharic Version'}
+                        </label>
+                        <textarea
+                          rows={3}
+                          value={tempBillingAm}
+                          onChange={(e) => setTempBillingAm(e.target.value)}
+                          className="w-full px-3.5 py-2.5 text-xs bg-white border border-neutral-200 rounded-xl focus:outline-none focus:border-neutral-900 focus:ring-1 focus:ring-neutral-900 text-neutral-800 placeholder:text-neutral-300 font-medium leading-relaxed"
+                          placeholder={DEFAULT_SMS_TEMPLATES.billing_am}
+                          id="sms-billing-am-field"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="block text-xs font-bold text-neutral-700">
+                          {lang === 'am' ? 'የእንግሊዘኛ መልዕክት' : 'English Version'}
+                        </label>
+                        <textarea
+                          rows={3}
+                          value={tempBillingEn}
+                          onChange={(e) => setTempBillingEn(e.target.value)}
+                          className="w-full px-3.5 py-2.5 text-xs bg-white border border-neutral-200 rounded-xl focus:outline-none focus:border-neutral-900 focus:ring-1 focus:ring-neutral-900 text-neutral-800 placeholder:text-neutral-300 font-medium leading-relaxed"
+                          placeholder={DEFAULT_SMS_TEMPLATES.billing_en}
+                          id="sms-billing-en-field"
+                        />
+                      </div>
+                    </div>
+                    <p className="text-[10px] text-[#A89F91] leading-relaxed italic">
+                      💡 <strong>{lang === 'am' ? 'መለያዎች፡' : 'Supported Placeholders:'}</strong> <code>{'{name}'}</code> {lang === 'am' ? 'በስም' : 'for customer name'}, <code>{'{amount}'}</code> {lang === 'am' ? 'በከፈሉት ጠቅላላ ድምር ብር በራስ-ሰር ይተካሉ።' : 'for total paid Birr amount.'}
+                    </p>
+                  </div>
+
+                  <div className="flex justify-end pt-2">
+                    <button
+                      type="submit"
+                      disabled={isTemplatesSaving}
+                      className="px-6 py-2.5 rounded-full bg-neutral-900 hover:bg-neutral-800 text-white font-bold text-xs shadow-ios transition-all active:scale-[0.98] disabled:opacity-50 flex items-center gap-1.5"
+                      id="btn-save-sms-templates"
+                    >
+                      {isTemplatesSaving ? (
+                        <span>⏳ {lang === 'am' ? 'በማስቀመጥ ላይ...' : 'Saving Templates...'}</span>
+                      ) : (
+                        <span>💾 {lang === 'am' ? 'ቴምፕሌቶችን አስቀምጥ' : 'Save Custom Templates'}</span>
+                      )}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            )}
 
             {/* Custom SMS Broadcaster Section */}
             {userRole === 'admin' && (

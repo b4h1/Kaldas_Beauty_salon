@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { CustomerWithRetention, Language } from '../types';
+import { CustomerWithRetention, Language, DEFAULT_SMS_TEMPLATES, formatSmsTemplate } from '../types';
 import { Dict } from '../translations';
 import { PlusCircle, AlertCircle, Sparkles, X } from 'lucide-react';
 import { collection, doc, setDoc, getDoc } from 'firebase/firestore';
@@ -121,9 +121,19 @@ export default function RegistrationForm({ existingCustomers, onRegisterSuccess,
         if (!isSmsEnabled) {
           console.log('[GeezSMS] SMS sending is disabled in settings. Skipping welcome SMS.');
         } else {
-          const welcomeMsg = lang === 'am'
-            ? `ውድ ${fullName.trim()}፣ ካልዳስ ውበት ሳሎን (Kaldas Beauty Salon) ስለተመዘገቡ እናመሰግናለን! ቴክኖሎጂውን በመጠቀም የተሻለ አገልግሎት ለማቅረብ እንተጋለን።`
-            : `Dear ${fullName.trim()}, thank you for registering with Kaldas Beauty Salon! We are thrilled to have you as our valued client.`;
+          let welcomeMsg = '';
+          try {
+            const templatesSnap = await getDoc(doc(db, 'settings', 'sms_templates'));
+            const data = templatesSnap.exists() ? templatesSnap.data() : null;
+            const template = lang === 'am'
+              ? (data?.welcome_am || DEFAULT_SMS_TEMPLATES.welcome_am)
+              : (data?.welcome_en || DEFAULT_SMS_TEMPLATES.welcome_en);
+            welcomeMsg = formatSmsTemplate(template, { name: fullName.trim() });
+          } catch (err) {
+            console.warn("Firestore templates lookup failed in RegistrationForm, using default:", err);
+            const template = lang === 'am' ? DEFAULT_SMS_TEMPLATES.welcome_am : DEFAULT_SMS_TEMPLATES.welcome_en;
+            welcomeMsg = formatSmsTemplate(template, { name: fullName.trim() });
+          }
 
           await fetch('/api/sms/send', {
             method: 'POST',

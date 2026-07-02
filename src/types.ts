@@ -67,6 +67,31 @@ export interface CRMData {
   staff?: StaffMember[];
 }
 
+export interface SmsTemplates {
+  welcome_am: string;
+  welcome_en: string;
+  billing_am: string;
+  billing_en: string;
+}
+
+export const DEFAULT_SMS_TEMPLATES: SmsTemplates = {
+  welcome_am: "ውድ {name}፣ ካልዳስ ውበት ሳሎን (Kaldas Beauty Salon) ስለተመዘገቡ እናመሰግናለን! ቴክኖሎጂውን በመጠቀም የተሻለ አገልግሎት ለማቅረብ እንተጋለን።",
+  welcome_en: "Dear {name}, thank you for registering with Kaldas Beauty Salon! We are thrilled to have you as our valued client.",
+  billing_am: "ውድ {name}፣ ስለመጡልን እናመሰግናለን! የከፈሉት ጠቅላላ ድምር {amount} ብር ነው። ካልዳስ ውበት ሳሎን!",
+  billing_en: "Dear {name}, thank you for visiting Kaldas Beauty Salon! You have successfully paid a total of {amount} Birr. We hope to see you again soon!"
+};
+
+export function formatSmsTemplate(template: string, placeholders: { name?: string; amount?: string | number }) {
+  let text = template || '';
+  if (placeholders.name !== undefined) {
+    text = text.replace(/{name}/g, placeholders.name);
+  }
+  if (placeholders.amount !== undefined) {
+    text = text.replace(/{amount}/g, String(placeholders.amount));
+  }
+  return text;
+}
+
 export interface BirthdayWish {
   id: string;
   customer_id: string;

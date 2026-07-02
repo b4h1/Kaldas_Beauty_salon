@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { CustomerWithRetention, PaymentMethod, SalonService, Language, Visit, StaffMember, TreatmentArtist } from '../types';
+import { CustomerWithRetention, PaymentMethod, SalonService, Language, Visit, StaffMember, TreatmentArtist, DEFAULT_SMS_TEMPLATES, formatSmsTemplate } from '../types';
 import { Dict, translateName, translateSkills, translateServiceName, translateCategory } from '../translations';
 import { Search, X, Check, Landmark, CreditCard, DollarSign, Receipt, Sparkles, Coins, Users, Hammer } from 'lucide-react';
 import { collection, doc, setDoc, getDoc } from 'firebase/firestore';
@@ -173,9 +173,19 @@ export default function CheckInModal({
             });
             const serviceNamesText = matchedNames.join(', ');
 
-            const thanksMsg = lang === 'am'
-              ? `ውድ ${selectedClient.full_name}፣ ስለመጡልን እናመሰግናለን! ለወሰዱት አገልግሎት (${serviceNamesText}) በ${paymentChannel === 'Cash' ? 'በጥሬ ገንዘብ' : paymentChannel} ${Number(priceCharged)} ብር ከፍለዋል። በድጋሚ እንዲጎበኙን እንጠብቃለን!`
-              : `Dear ${selectedClient.full_name}, thank you for visiting Kaldas Beauty Salon! You have successfully paid ${Number(priceCharged)} Birr via ${paymentChannel} for services: ${serviceNamesText}. We look forward to seeing you again!`;
+            let thanksMsg = '';
+            try {
+              const templatesSnap = await getDoc(doc(db, 'settings', 'sms_templates'));
+              const data = templatesSnap.exists() ? templatesSnap.data() : null;
+              const template = lang === 'am'
+                ? (data?.billing_am || DEFAULT_SMS_TEMPLATES.billing_am)
+                : (data?.billing_en || DEFAULT_SMS_TEMPLATES.billing_en);
+              thanksMsg = formatSmsTemplate(template, { name: selectedClient.full_name, amount: Number(priceCharged) });
+            } catch (err) {
+              console.warn("Firestore templates lookup failed in CheckInModal, using default:", err);
+              const template = lang === 'am' ? DEFAULT_SMS_TEMPLATES.billing_am : DEFAULT_SMS_TEMPLATES.billing_en;
+              thanksMsg = formatSmsTemplate(template, { name: selectedClient.full_name, amount: Number(priceCharged) });
+            }
 
             await fetch('/api/sms/send', {
               method: 'POST',
