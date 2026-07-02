@@ -39,6 +39,7 @@ interface AdminAnalyticsProps {
   salonServices?: SalonService[];
   staffList?: any[];
   artistsList?: TreatmentArtist[];
+  userRole?: 'admin' | 'cashier' | 'assistant' | null;
 }
 
 export default function AdminAnalytics({ 
@@ -48,7 +49,8 @@ export default function AdminAnalytics({
   allVisits = [], 
   salonServices = [],
   staffList = [],
-  artistsList = []
+  artistsList = [],
+  userRole = null
 }: AdminAnalyticsProps) {
   // Custom range states
   const [startDate, setStartDate] = useState(() => {
@@ -69,6 +71,17 @@ export default function AdminAnalytics({
     const today = new Date();
     return today.toISOString().split('T')[0];
   });
+
+  const minAllowedDateStr = React.useMemo(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 3);
+    return d.toISOString().split('T')[0];
+  }, []);
+
+  const maxAllowedDateStr = React.useMemo(() => {
+    const d = new Date();
+    return d.toISOString().split('T')[0];
+  }, []);
 
   // Compute live responsive analytics client side
   const analytics = React.useMemo(() => {
@@ -387,10 +400,21 @@ export default function AdminAnalytics({
           <div className="absolute top-1 right-2 p-2 text-neutral-100/60 font-black text-6xl select-none leading-none z-0">{lang === 'am' ? 'ሳምንት' : 'WEEK'}</div>
           <div className="z-10">
             <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider block">{dict.card_weekly}</span>
-            <span className="text-3xl font-extrabold text-neutral-900 mt-1.5 block">
-              ETB {analytics?.revenue.weekly.toFixed(2)}
-            </span>
-            <p className="text-[10px] text-neutral-500 font-semibold mt-1 block">{dict.rolling_7_days}</p>
+            {userRole === 'admin' ? (
+              <>
+                <span className="text-3xl font-extrabold text-neutral-900 mt-1.5 block">
+                  ETB {analytics?.revenue.weekly.toFixed(2)}
+                </span>
+                <p className="text-[10px] text-neutral-500 font-semibold mt-1 block">{dict.rolling_7_days}</p>
+              </>
+            ) : (
+              <div className="mt-2.5 space-y-1">
+                <span className="text-2xl font-extrabold text-neutral-300 tracking-widest block">ETB ••••</span>
+                <span className="inline-flex items-center gap-1 text-[9px] font-bold text-amber-600 bg-amber-50 border border-amber-200/30 px-2 py-0.5 rounded-full">
+                  🔒 {lang === 'am' ? 'ለአስተዳዳሪ ብቻ' : 'Admin Authorization Required'}
+                </span>
+              </div>
+            )}
           </div>
         </div>
 
@@ -399,10 +423,21 @@ export default function AdminAnalytics({
           <div className="absolute top-1 right-2 p-2 text-neutral-100/60 font-black text-6xl select-none leading-none z-0">{lang === 'am' ? 'ወር' : 'MONTH'}</div>
           <div className="z-10">
             <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider block">{dict.card_monthly}</span>
-            <span className="text-3xl font-extrabold text-neutral-900 mt-1.5 block">
-              ETB {analytics?.revenue.monthly.toFixed(2)}
-            </span>
-            <p className="text-[10px] text-neutral-400 font-semibold mt-1">{dict.calendar_month}</p>
+            {userRole === 'admin' ? (
+              <>
+                <span className="text-3xl font-extrabold text-neutral-900 mt-1.5 block">
+                  ETB {analytics?.revenue.monthly.toFixed(2)}
+                </span>
+                <p className="text-[10px] text-neutral-400 font-semibold mt-1">{dict.calendar_month}</p>
+              </>
+            ) : (
+              <div className="mt-2.5 space-y-1">
+                <span className="text-2xl font-extrabold text-neutral-300 tracking-widest block">ETB ••••</span>
+                <span className="inline-flex items-center gap-1 text-[9px] font-bold text-amber-600 bg-amber-50 border border-amber-200/30 px-2 py-0.5 rounded-full">
+                  🔒 {lang === 'am' ? 'ለአስተዳዳሪ ብቻ' : 'Admin Authorization Required'}
+                </span>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -568,9 +603,18 @@ export default function AdminAnalytics({
                   onClick={() => {
                     const prev = new Date(selectedHistoryDate);
                     prev.setDate(prev.getDate() - 1);
-                    setSelectedHistoryDate(prev.toISOString().split('T')[0]);
+                    const prevStr = prev.toISOString().split('T')[0];
+                    if (userRole !== 'admin' && prevStr < minAllowedDateStr) {
+                      return; // restricted
+                    }
+                    setSelectedHistoryDate(prevStr);
                   }}
-                  className="p-2 hover:bg-white rounded-xl transition-all cursor-pointer border border-transparent hover:border-neutral-200/40"
+                  disabled={userRole !== 'admin' && selectedHistoryDate <= minAllowedDateStr}
+                  className={`p-2 rounded-xl transition-all border border-transparent ${
+                    userRole !== 'admin' && selectedHistoryDate <= minAllowedDateStr
+                      ? 'opacity-30 cursor-not-allowed'
+                      : 'hover:bg-white hover:border-neutral-200/40 cursor-pointer'
+                  }`}
                 >
                   <ChevronLeft className="w-4 h-4 text-neutral-600" />
                 </button>
@@ -580,7 +624,22 @@ export default function AdminAnalytics({
                   <input
                     type="date"
                     value={selectedHistoryDate}
-                    onChange={(e) => setSelectedHistoryDate(e.target.value)}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (userRole !== 'admin') {
+                        if (val < minAllowedDateStr) {
+                          setSelectedHistoryDate(minAllowedDateStr);
+                          return;
+                        }
+                        if (val > maxAllowedDateStr) {
+                          setSelectedHistoryDate(maxAllowedDateStr);
+                          return;
+                        }
+                      }
+                      setSelectedHistoryDate(val);
+                    }}
+                    min={userRole !== 'admin' ? minAllowedDateStr : undefined}
+                    max={userRole !== 'admin' ? maxAllowedDateStr : undefined}
                     className="absolute inset-0 opacity-0 cursor-pointer w-full z-10"
                     id="picker-history-date"
                   />
@@ -599,9 +658,18 @@ export default function AdminAnalytics({
                   onClick={() => {
                     const next = new Date(selectedHistoryDate);
                     next.setDate(next.getDate() + 1);
-                    setSelectedHistoryDate(next.toISOString().split('T')[0]);
+                    const nextStr = next.toISOString().split('T')[0];
+                    if (userRole !== 'admin' && nextStr > maxAllowedDateStr) {
+                      return; // restricted
+                    }
+                    setSelectedHistoryDate(nextStr);
                   }}
-                  className="p-2 hover:bg-white rounded-xl transition-all cursor-pointer border border-transparent hover:border-neutral-200/40"
+                  disabled={userRole !== 'admin' && selectedHistoryDate >= maxAllowedDateStr}
+                  className={`p-2 rounded-xl transition-all border border-transparent ${
+                    userRole !== 'admin' && selectedHistoryDate >= maxAllowedDateStr
+                      ? 'opacity-30 cursor-not-allowed'
+                      : 'hover:bg-white hover:border-neutral-200/40 cursor-pointer'
+                  }`}
                 >
                   <ChevronRight className="w-4 h-4 text-neutral-600" />
                 </button>
@@ -621,20 +689,27 @@ export default function AdminAnalytics({
                 })().map((d) => {
                   const slug = d.toISOString().split('T')[0];
                   const isSelected = slug === selectedHistoryDate;
+                  const isRestricted = userRole !== 'admin' && (slug < minAllowedDateStr || slug > maxAllowedDateStr);
                   const weekday = d.toLocaleDateString(lang === 'am' ? 'am-ET' : 'en-US', { weekday: 'narrow' });
                   const dayNum = d.getDate();
                   return (
                     <button
                       key={slug}
                       type="button"
+                      disabled={isRestricted}
                       onClick={() => setSelectedHistoryDate(slug)}
-                      className={`py-1.5 px-1 rounded-xl border flex flex-col items-center justify-center transition-all cursor-pointer ${
-                        isSelected
-                          ? 'bg-neutral-900 border-neutral-900 text-white shadow-sm'
-                          : 'bg-white hover:bg-neutral-50 border-neutral-200/50 text-neutral-650'
+                      className={`py-1.5 px-1 rounded-xl border flex flex-col items-center justify-center transition-all ${
+                        isRestricted
+                          ? 'bg-neutral-50 border-neutral-200/20 text-neutral-300 cursor-not-allowed opacity-40'
+                          : isSelected
+                          ? 'bg-neutral-900 border-neutral-900 text-white shadow-sm cursor-pointer'
+                          : 'bg-white hover:bg-neutral-50 border-neutral-200/50 text-neutral-650 cursor-pointer'
                       }`}
+                      title={isRestricted ? (lang === 'am' ? 'የአስተዳዳሪ ብቻ ታሪክ' : 'Admin Only History') : undefined}
                     >
-                      <span className="text-[9px] uppercase tracking-wider font-extrabold opacity-60">{weekday}</span>
+                      <span className="text-[9px] uppercase tracking-wider font-extrabold opacity-60">
+                        {isRestricted ? '🔒' : weekday}
+                      </span>
                       <span className="text-xs font-black font-mono">{dayNum}</span>
                     </button>
                   );

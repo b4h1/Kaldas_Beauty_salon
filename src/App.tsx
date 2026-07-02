@@ -1090,6 +1090,7 @@ export default function App() {
               salonServices={salonServices}
               staffList={staffList}
               artistsList={artistsList}
+              userRole={userRole}
             />
           </div>
 
